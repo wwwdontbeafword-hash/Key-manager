@@ -36,6 +36,17 @@ def db():
         version INTEGER NOT NULL DEFAULT 0,
         updated TEXT NOT NULL
     )""")
+    state_cols = {r["name"] for r in con.execute("PRAGMA table_info(server_state)").fetchall()}
+    if "update_active" not in state_cols:
+        con.execute("ALTER TABLE server_state ADD COLUMN update_active INTEGER NOT NULL DEFAULT 0")
+    con.execute("""CREATE TABLE IF NOT EXISTS audit_logs(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        detail TEXT NOT NULL,
+        device TEXT NOT NULL,
+        ip TEXT NOT NULL,
+        created TEXT NOT NULL
+    )""")
     if not con.execute("SELECT 1 FROM server_state WHERE id=1").fetchone():
         con.execute("INSERT INTO server_state(id,title,message,enabled,version,updated) VALUES(1,?,?,?,?,?)",
                     ("Error!","A new update is available. Please update to the latest version.",1,0,datetime.utcnow().isoformat()))
@@ -50,6 +61,19 @@ def db():
 
 def logged_in():
     return session.get("admin") is True
+
+def client_device():
+    ua=request.headers.get("User-Agent","Unknown device")
+    if "Android" in ua: return "Android"
+    if "iPhone" in ua or "iPad" in ua: return "iPhone / iPad"
+    if "Windows" in ua: return "Windows"
+    if "Macintosh" in ua: return "Mac"
+    return ua[:55]
+
+def add_log(con, action, detail):
+    ip=(request.headers.get("X-Forwarded-For") or request.remote_addr or "Unknown").split(",")[0].strip()
+    con.execute("INSERT INTO audit_logs(action,detail,device,ip,created) VALUES(?,?,?,?,?)",
+                (action,detail,client_device(),ip,datetime.utcnow().isoformat()))
 
 def seconds_left(row):
     if row["stopped"] and row["paused_seconds"] is not None:
@@ -103,6 +127,9 @@ LOGIN_HTML=r"""
 .avatar{width:60%;aspect-ratio:1/1;margin:0 auto 17px;border-radius:15px;overflow:hidden;border:1px solid #30394a;box-shadow:0 0 28px #704cff25;animation:float 3.2s ease-in-out infinite}
 .avatar img{width:100%;height:100%;object-fit:cover}@keyframes float{50%{transform:translateY(-5px)}}p{color:#b8beca}
 input,button{width:100%;padding:13px;margin-top:10px;border-radius:9px}input{background:#0d1117;color:#fff;border:1px solid #394150;outline:none}button{border:0;color:#fff;font-weight:800;background:linear-gradient(90deg,#633bff,#a53cff);cursor:pointer;transition:.2s}button:active{transform:scale(.97)}.error{color:#ff637d}
+
+.toastStack{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:100;width:min(430px,92vw);display:grid;gap:10px;pointer-events:none}.toast{position:relative;overflow:hidden;display:flex;gap:12px;align-items:center;padding:13px 14px;border:1px solid #293249;border-radius:14px;background:#090e18eF;backdrop-filter:blur(18px);box-shadow:0 18px 55px #000b,0 0 30px #7652ff25;animation:toastIn .48s cubic-bezier(.16,.9,.2,1),toastOut .45s ease 3.75s forwards}.toastIcon{width:42px;height:42px;flex:0 0 42px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:linear-gradient(135deg,#5137d8,#a43ff1);box-shadow:0 0 20px #754cff55}.toast b{display:block}.toast small{display:block;color:#9da7ba;margin-top:3px}.toast:after{content:"";position:absolute;bottom:0;left:0;height:2px;width:100%;background:linear-gradient(90deg,#5d7cff,#c13cff,#3eea9b);animation:toastBar 4s linear forwards}@keyframes toastIn{from{opacity:0;transform:translateY(-28px) scale(.92)}}@keyframes toastOut{to{opacity:0;transform:translateY(-20px) scale(.96)}}@keyframes toastBar{to{width:0}}
+.updateBadge{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;font-size:11px;font-weight:900;border:1px solid #2c3448;background:#0b101a}.updateBadge.live{color:#ffc85a;border-color:#62491b;box-shadow:0 0 20px #ffb83d18}.updateBadge.clear{color:#5ceca0;border-color:#19573b}.miniDot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.updateTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.cancelUpdate{width:100%;margin-top:9px;color:#ff7188;background:#260a13;border-color:#6b2031;font-weight:900;cursor:pointer}.logsPage{display:none;animation:sectionIn .5s ease}.logsPage.show{display:block}.logWrap{margin-top:22px;background:#070b13;border:1px solid #1b2434;border-radius:17px;overflow:hidden}.logHead{padding:22px;border-bottom:1px solid #182131}.logItem{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:center;padding:16px 20px;border-top:1px solid #121a28;transition:.25s}.logItem:hover{background:#0a101c;transform:translateX(3px)}.logIcon{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:19px;background:#10172a;border:1px solid #2b3650;box-shadow:0 0 18px #6b55ff18}.logTitle{font-weight:900}.logDetail{font-size:12px;color:#909bb0;margin-top:4px}.logMeta{text-align:right;font-size:11px;color:#747f95}.emptyLogs{text-align:center;color:#788198;padding:55px 20px}
 </style></head><body><div class="bg"></div><div class="shell"><div class="box">
 <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px">
 <button type="button" onclick="setLang('en')" style="width:auto;margin:0;padding:6px 10px;font-size:11px">EN</button>
@@ -133,10 +160,14 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 .keys{margin-top:20px;background:#060a12;border:1px solid var(--line);border-radius:16px;overflow:hidden}.keys-head{padding:21px;border-bottom:1px solid var(--line)}.keys-head h3{margin:0}table{width:100%;border-collapse:collapse}th{padding:15px 18px;text-align:left;font-size:10px;letter-spacing:2px;color:#737c94}td{padding:16px 18px;border-top:1px solid #111827}.keycell{display:flex;align-items:center;gap:12px;font-weight:800}.keyicon{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;border:1px solid currentColor;box-shadow:0 0 18px currentColor}.keyicon svg{width:20px;height:20px;fill:currentColor}.keyicon.on{color:#39e88b;background:#06331f}.keyicon.off{color:#ff536f;background:#3a0b16}.status{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:7px 10px;font-size:10px;font-weight:900}.status.on{color:#42ec92;background:#07271c}.status.off{color:#ff617a;background:#2b0b14}.dot{width:6px;height:6px;border-radius:50%;background:currentColor}.exp{font-family:monospace;color:#cbd2e3;white-space:nowrap}.devices{color:#aab3c7;white-space:nowrap}.action{display:inline-block;margin:2px}.action button{font-weight:800;cursor:pointer;background:#0a0e17}.stop button{color:#ffb642;border-color:#684612;background:#241807}.start button{color:#4ef09a;border-color:#17623e;background:#06251a}.delete button{color:#ff617a;border-color:#6e2032;background:#260a12}
 .server{display:none;animation:sectionIn .5s ease}.server.show,.keysPage.show{display:block}.keysPage.hide{display:none}@keyframes sectionIn{from{opacity:0;transform:translateX(18px)}}.serverGrid{display:grid;gap:20px;margin-top:22px}.serverCard{background:#070b13;border:1px solid #1c2535;border-radius:17px;padding:23px;box-shadow:0 15px 50px #0004;animation:cardBreath 4s ease-in-out infinite}@keyframes cardBreath{50%{border-color:#41366f;box-shadow:0 15px 60px #684cff12}}.serverCard h2{margin:0 0 6px}.serverCard textarea{min-height:72px;resize:vertical;margin-top:9px}.beam{height:2px;margin:27px 0;border-radius:10px;background:linear-gradient(90deg,transparent,#5d7cff,#b44cff,#5d7cff,transparent);background-size:200%;animation:beam 2.4s linear infinite;box-shadow:0 0 15px #785bff}@keyframes beam{to{background-position:200%}}.serverStatus{display:flex;align-items:center;justify-content:space-between;gap:20px}.lamp{width:62px;height:62px;border-radius:16px;background:#092c1d;border:1px solid #31e88b;box-shadow:0 0 25px #31e88b55;animation:lamp 1.7s ease-in-out infinite}.lamp.off{background:#360b15;border-color:#ff536f;box-shadow:0 0 25px #ff536f55}@keyframes lamp{50%{filter:brightness(1.45);transform:scale(1.04)}}.toggleServer{min-width:125px;font-weight:900;cursor:pointer}.flash{animation:flash .5s ease}@keyframes flash{50%{filter:brightness(1.8)}}
 @media(max-width:760px){.grid{grid-template-columns:1fr}.hero img{max-height:none}.fields{grid-template-columns:1fr 1fr}.custom{grid-template-columns:1fr 1fr}.custom input:first-child{grid-column:1/-1}.keys{overflow-x:auto}table{min-width:820px}.title{font-size:27px}.drawer{width:75vw;min-width:0}}
+
+.toastStack{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:100;width:min(430px,92vw);display:grid;gap:10px;pointer-events:none}.toast{position:relative;overflow:hidden;display:flex;gap:12px;align-items:center;padding:13px 14px;border:1px solid #293249;border-radius:14px;background:#090e18eF;backdrop-filter:blur(18px);box-shadow:0 18px 55px #000b,0 0 30px #7652ff25;animation:toastIn .48s cubic-bezier(.16,.9,.2,1),toastOut .45s ease 3.75s forwards}.toastIcon{width:42px;height:42px;flex:0 0 42px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:linear-gradient(135deg,#5137d8,#a43ff1);box-shadow:0 0 20px #754cff55}.toast b{display:block}.toast small{display:block;color:#9da7ba;margin-top:3px}.toast:after{content:"";position:absolute;bottom:0;left:0;height:2px;width:100%;background:linear-gradient(90deg,#5d7cff,#c13cff,#3eea9b);animation:toastBar 4s linear forwards}@keyframes toastIn{from{opacity:0;transform:translateY(-28px) scale(.92)}}@keyframes toastOut{to{opacity:0;transform:translateY(-20px) scale(.96)}}@keyframes toastBar{to{width:0}}
+.updateBadge{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;font-size:11px;font-weight:900;border:1px solid #2c3448;background:#0b101a}.updateBadge.live{color:#ffc85a;border-color:#62491b;box-shadow:0 0 20px #ffb83d18}.updateBadge.clear{color:#5ceca0;border-color:#19573b}.miniDot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.updateTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.cancelUpdate{width:100%;margin-top:9px;color:#ff7188;background:#260a13;border-color:#6b2031;font-weight:900;cursor:pointer}.logsPage{display:none;animation:sectionIn .5s ease}.logsPage.show{display:block}.logWrap{margin-top:22px;background:#070b13;border:1px solid #1b2434;border-radius:17px;overflow:hidden}.logHead{padding:22px;border-bottom:1px solid #182131}.logItem{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:center;padding:16px 20px;border-top:1px solid #121a28;transition:.25s}.logItem:hover{background:#0a101c;transform:translateX(3px)}.logIcon{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:19px;background:#10172a;border:1px solid #2b3650;box-shadow:0 0 18px #6b55ff18}.logTitle{font-weight:900}.logDetail{font-size:12px;color:#909bb0;margin-top:4px}.logMeta{text-align:right;font-size:11px;color:#747f95}.emptyLogs{text-align:center;color:#788198;padding:55px 20px}
 </style></head><body>
 <div class="drawerShade" id="shade" onclick="menu(false)"></div><aside class="drawer" id="drawer"><div class="profile"><div class="avatar2">C</div><h3>Cheto_Admin</h3></div><nav class="nav">
 <a href="#" id="navKeys" class="active" onclick="page('keys');return false"><span>⌘</span><b data-en="Keys Manager" data-ar="إدارة المفاتيح">Keys Manager</b></a>
-<a href="#" id="navServer" onclick="page('server');return false"><span>◈</span><b data-en="Server Manager" data-ar="إدارة السيرفر">Server Manager</b></a></nav></aside>
+<a href="#" id="navServer" onclick="page('server');return false"><span>◈</span><b data-en="Server Manager" data-ar="إدارة السيرفر">Server Manager</b></a>
+<a href="#" id="navLogs" onclick="page('logs');return false"><span>≡</span><b data-en="Activity Logs" data-ar="سجل النشاط">Activity Logs</b></a></nav></aside>
 <div class="wrap"><div class="top"><div><div class="eyebrow">MIDNIGHT CONTROL</div><div class="title" data-en="Key Manager" data-ar="إدارة المفاتيح">Key Manager</div></div>
 <div class="topright"><div><a class="logout" href="/logout" data-en="Logout" data-ar="تسجيل الخروج">Logout</a><div class="lang"><button onclick="setLang('en')">EN</button><button onclick="setLang('ar')">عربي</button></div></div><button class="menuBtn" onclick="menu(true)">☰</button></div></div>
 
@@ -150,15 +181,22 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 </section>
 
 <section class="server" id="serverPage"><div class="serverGrid">
-<div class="serverCard"><h2 data-en="Send Updates Online" data-ar="إرسال التحديثات أونلاين">Send Updates Online</h2><div class="hint" data-en="Publish an update message to connected clients." data-ar="إرسال رسالة تحديث للعملاء المتصلين.">Publish an update message to connected clients.</div>
-<form action="/server/update" method="POST"><input name="title" value="{{server['title']}}" required><textarea name="message" required>{{server["message"]}}</textarea><button class="primary" data-en="SEND UPDATE" data-ar="إرسال التحديث">SEND UPDATE</button></form></div>
+<div class="serverCard"><div class="updateTop"><div><h2 data-en="Send Updates Online" data-ar="إرسال التحديثات أونلاين">Send Updates Online</h2><div class="hint" data-en="Publish an update message to connected clients." data-ar="إرسال رسالة تحديث للعملاء المتصلين.">Publish an update message to connected clients.</div></div>
+<span class="updateBadge {{'live' if server['update_active'] else 'clear'}}"><i class="miniDot"></i>{{"UPDATE LIVE" if server["update_active"] else "NO ACTIVE UPDATE"}}</span></div>
+<form action="/server/update" method="POST"><input name="title" value="{{server['title']}}" required {% if server["update_active"] %}disabled{% endif %}><textarea name="message" required {% if server["update_active"] %}disabled{% endif %}>{{server["message"]}}</textarea><button class="primary" {% if server["update_active"] %}disabled style="opacity:.42;cursor:not-allowed"{% endif %} data-en="SEND UPDATE" data-ar="إرسال التحديث">SEND UPDATE</button></form>
+{% if server["update_active"] %}<form action="/server/update/cancel" method="POST"><button class="cancelUpdate" data-en="CANCEL CURRENT UPDATE" data-ar="إلغاء التحديث الحالي">CANCEL CURRENT UPDATE</button></form>{% endif %}</div>
 <div class="beam"></div>
 <div class="serverCard"><div class="serverStatus"><div><h2 data-en="Hack Server Control" data-ar="التحكم بسيرفر الهاك">Hack Server Control</h2><div class="hint" data-en="Enable or completely stop key verification from the server." data-ar="تشغيل أو إيقاف التحقق من المفاتيح بالكامل من السيرفر.">Enable or completely stop key verification from the server.</div><b>{{"ONLINE" if server["enabled"] else "OFFLINE"}}</b></div><div class="lamp {{'' if server['enabled'] else 'off'}}"></div></div>
 <form action="/server/toggle" method="POST"><button class="primary toggleServer">{{"STOP SERVER" if server["enabled"] else "START SERVER"}}</button></form></div></div></section>
+<section class="logsPage" id="logsPage"><div class="logWrap"><div class="logHead"><h2 style="margin:0" data-en="Activity Logs" data-ar="سجل النشاط">Activity Logs</h2><div class="hint" data-en="Recent actions performed from this control panel." data-ar="آخر العمليات التي تمت من لوحة التحكم.">Recent actions performed from this control panel.</div></div>
+{% if logs %}{% for l in logs %}<div class="logItem"><div class="logIcon">{{l["icon"]}}</div><div><div class="logTitle">{{l["action"]}}</div><div class="logDetail">{{l["detail"]}}</div></div><div class="logMeta"><b>{{l["device"]}}</b><br>{{l["created_short"]}}</div></div>{% endfor %}{% else %}<div class="emptyLogs">No activity yet</div>{% endif %}</div></section>
+<div class="toastStack" id="toastStack"></div>
 </div>
 <script>
 function menu(x){document.getElementById("drawer").classList.toggle("show",x);document.getElementById("shade").classList.toggle("show",x)}
-function page(p){let k=p==="keys";document.getElementById("keysPage").classList.toggle("hide",!k);document.getElementById("serverPage").classList.toggle("show",!k);document.getElementById("navKeys").classList.toggle("active",k);document.getElementById("navServer").classList.toggle("active",!k);localStorage.setItem("km_page",p);menu(false)}
+function page(p){let k=p==="keys",sv=p==="server",lg=p==="logs";document.getElementById("keysPage").classList.toggle("hide",!k);document.getElementById("serverPage").classList.toggle("show",sv);document.getElementById("logsPage").classList.toggle("show",lg);document.getElementById("navKeys").classList.toggle("active",k);document.getElementById("navServer").classList.toggle("active",sv);document.getElementById("navLogs").classList.toggle("active",lg);localStorage.setItem("km_page",p);menu(false)}
+function toast(icon,msg){let t=document.createElement("div");t.className="toast";t.innerHTML=`<div class="toastIcon">${icon}</div><div><b>Cheto</b><small>${msg}</small></div>`;document.getElementById("toastStack").appendChild(t);setTimeout(()=>t.remove(),4300)}
+{% if notice %}setTimeout(()=>toast({{notice_icon|tojson}},{{notice|tojson}}),250);{% endif %}
 function setLang(l){localStorage.setItem("km_lang",l);document.documentElement.lang=l;document.documentElement.dir=l==="ar"?"rtl":"ltr";document.querySelectorAll("[data-"+l+"]").forEach(e=>e.textContent=e.dataset[l]);document.querySelectorAll('input[placeholder="Days"]').forEach(e=>e.placeholder=l==="ar"?"الأيام":"Days");document.querySelectorAll('input[placeholder="Hours"]').forEach(e=>e.placeholder=l==="ar"?"الساعات":"Hours");document.querySelectorAll('input[placeholder="Devices"]').forEach(e=>e.placeholder=l==="ar"?"الأجهزة":"Devices");document.querySelectorAll('input[placeholder="Custom key"]').forEach(e=>e.placeholder=l==="ar"?"مفتاح مخصص":"Custom key")}
 setLang(localStorage.getItem("km_lang")||"en");page(localStorage.getItem("km_page")||"keys");
 setInterval(()=>document.querySelectorAll("[data-seconds]").forEach(el=>{let s=parseInt(el.dataset.seconds||0);if(el.dataset.running==="1"&&s>0){s--;el.dataset.seconds=s}let d=Math.floor(s/86400);s%=86400;let h=Math.floor(s/3600);s%=3600;let m=Math.floor(s/60),x=s%60;el.textContent=`${d}D-${h}h-${m}m-${x}s`}),1000);
@@ -200,8 +238,18 @@ def home():
         x["used_devices"]=con.execute("SELECT COUNT(*) c FROM key_devices WHERE key=?",(r["key"],)).fetchone()["c"]
         items.append(x)
     server=con.execute("SELECT * FROM server_state WHERE id=1").fetchone()
+    logrows=con.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 60").fetchall()
+    icons={"KEY_CREATED":"✦","KEY_ADDED":"＋","KEY_STOPPED":"Ⅱ","KEY_STARTED":"▶","KEY_DELETED":"×","UPDATE_SENT":"↑","UPDATE_CANCELLED":"↶","SERVER_STOPPED":"■","SERVER_STARTED":"●"}
+    logs=[]
+    for lr in logrows:
+        z=dict(lr);z["icon"]=icons.get(z["action"],"•")
+        try:z["created_short"]=datetime.fromisoformat(z["created"]).strftime("%Y-%m-%d %H:%M:%S")
+        except:z["created_short"]=z["created"]
+        z["action"]=z["action"].replace("_"," ").title()
+        logs.append(z)
     con.close()
-    return render_template_string(PANEL_HTML,keys=items,server=server)
+    notice=session.pop("notice",None);notice_icon=session.pop("notice_icon","✓")
+    return render_template_string(PANEL_HTML,keys=items,server=server,logs=logs,notice=notice,notice_icon=notice_icon)
 
 @app.route("/generate",methods=["POST"])
 def generate():
@@ -215,7 +263,8 @@ def generate():
     now=datetime.utcnow()
     con.execute("INSERT INTO keys(key,expiry,active,created,max_devices,paused_seconds,stopped) VALUES(?,?,?,?,?,NULL,0)",
                 (key,(now+duration).isoformat(),1,now.isoformat(),limit))
-    con.commit();con.close();return redirect("/")
+    add_log(con,"KEY_CREATED",f"Generated {key} • {days}D {hours}H • {limit} device(s)")
+    con.commit();con.close();session["notice"]="New key generated successfully";session["notice_icon"]="✦";return redirect("/")
 
 @app.route("/add",methods=["POST"])
 def add_key():
@@ -227,7 +276,8 @@ def add_key():
     con.execute("INSERT OR REPLACE INTO keys(key,expiry,active,created,max_devices,paused_seconds,stopped) VALUES(?,?,?,?,?,NULL,0)",
                 (key,(now+duration).isoformat(),1,now.isoformat(),limit))
     con.execute("DELETE FROM key_devices WHERE key=?",(key,))
-    con.commit();con.close();return redirect("/")
+    add_log(con,"KEY_ADDED",f"Added custom key {key} • limit {limit} device(s)")
+    con.commit();con.close();session["notice"]="Custom key added successfully";session["notice_icon"]="＋";return redirect("/")
 
 @app.route("/stop/<key>",methods=["POST"])
 def stop(key):
@@ -236,8 +286,9 @@ def stop(key):
     if r:
         sec=seconds_left(r)
         con.execute("UPDATE keys SET active=0,stopped=1,paused_seconds=? WHERE key=?",(sec,key))
+        add_log(con,"KEY_STOPPED",f"Stopped key {key} with {pretty_time(sec)} remaining")
         con.commit()
-    con.close();return redirect("/")
+    con.close();session["notice"]="Key stopped and timer paused";session["notice_icon"]="Ⅱ";return redirect("/")
 
 @app.route("/start/<key>",methods=["POST"])
 def start(key):
@@ -247,14 +298,15 @@ def start(key):
         sec=max(0,int(r["paused_seconds"] or 0))
         con.execute("UPDATE keys SET active=1,stopped=0,paused_seconds=NULL,expiry=? WHERE key=?",
                     ((datetime.utcnow()+timedelta(seconds=sec)).isoformat(),key))
+        add_log(con,"KEY_STARTED",f"Started key {key} with {pretty_time(sec)} remaining")
         con.commit()
-    con.close();return redirect("/")
+    con.close();session["notice"]="Key started and timer resumed";session["notice_icon"]="▶";return redirect("/")
 
 @app.route("/delete/<key>",methods=["POST"])
 def delete(key):
     if not logged_in(): return redirect("/")
-    con=db();con.execute("DELETE FROM key_devices WHERE key=?",(key,));con.execute("DELETE FROM keys WHERE key=?",(key,));con.commit();con.close()
-    return redirect("/")
+    con=db();con.execute("DELETE FROM key_devices WHERE key=?",(key,));con.execute("DELETE FROM keys WHERE key=?",(key,));add_log(con,"KEY_DELETED",f"Deleted key {key}");con.commit();con.close()
+    session["notice"]="Key deleted";session["notice_icon"]="×";return redirect("/")
 
 @app.route("/verify",methods=["POST"])
 def verify():
@@ -284,21 +336,40 @@ def verify():
 @app.route("/server/status",methods=["GET"])
 def server_status():
     con=db();s=con.execute("SELECT * FROM server_state WHERE id=1").fetchone();con.close()
-    return jsonify(enabled=bool(s["enabled"]),title=s["title"],message=s["message"],version=s["version"],updated=s["updated"])
+    return jsonify(enabled=bool(s["enabled"]),update_active=bool(s["update_active"]),title=s["title"],message=s["message"],version=s["version"],updated=s["updated"])
 
 @app.route("/server/update",methods=["POST"])
 def server_update():
     if not logged_in(): return redirect("/")
     title=request.form.get("title","Error!").strip() or "Error!"
     message=request.form.get("message","").strip() or "A new update is available. Please update to the latest version."
-    con=db();con.execute("UPDATE server_state SET title=?,message=?,version=version+1,updated=? WHERE id=1",(title,message,datetime.utcnow().isoformat()));con.commit();con.close()
+    con=db();state=con.execute("SELECT update_active FROM server_state WHERE id=1").fetchone()
+    if state and state["update_active"]:
+        con.close();session["notice"]="An update is already active. Cancel it first.";session["notice_icon"]="!";return redirect("/#server")
+    con.execute("UPDATE server_state SET title=?,message=?,update_active=1,version=version+1,updated=? WHERE id=1",(title,message,datetime.utcnow().isoformat()))
+    add_log(con,"UPDATE_SENT",f"{title} — {message[:90]}")
+    con.commit();con.close();session["notice"]="Update published successfully";session["notice_icon"]="↑"
     return redirect("/#server")
+
+@app.route("/server/update/cancel",methods=["POST"])
+def server_update_cancel():
+    if not logged_in(): return redirect("/")
+    con=db();state=con.execute("SELECT * FROM server_state WHERE id=1").fetchone()
+    if state and state["update_active"]:
+        con.execute("UPDATE server_state SET update_active=0,updated=? WHERE id=1",(datetime.utcnow().isoformat(),))
+        add_log(con,"UPDATE_CANCELLED",f"Cancelled active update: {state['title']}")
+        con.commit()
+        session["notice"]="Current update cancelled";session["notice_icon"]="↶"
+    con.close();return redirect("/#server")
 
 @app.route("/server/toggle",methods=["POST"])
 def server_toggle():
     if not logged_in(): return redirect("/")
     con=db();s=con.execute("SELECT enabled FROM server_state WHERE id=1").fetchone()
-    con.execute("UPDATE server_state SET enabled=?,updated=? WHERE id=1",(0 if s["enabled"] else 1,datetime.utcnow().isoformat()));con.commit();con.close()
+    new_state=0 if s["enabled"] else 1
+    con.execute("UPDATE server_state SET enabled=?,updated=? WHERE id=1",(new_state,datetime.utcnow().isoformat()))
+    add_log(con,"SERVER_STARTED" if new_state else "SERVER_STOPPED","Server verification switched "+("ONLINE" if new_state else "OFFLINE"))
+    con.commit();con.close();session["notice"]="Server is now "+("ONLINE" if new_state else "OFFLINE");session["notice_icon"]="●" if new_state else "■"
     return redirect("/#server")
 
 @app.route("/logout")

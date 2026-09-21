@@ -47,6 +47,24 @@ def db():
         ip TEXT NOT NULL,
         created TEXT NOT NULL
     )""")
+    con.execute("""CREATE TABLE IF NOT EXISTS log_cycle(
+        id INTEGER PRIMARY KEY CHECK(id=1),
+        reset_at TEXT NOT NULL
+    )""")
+    cycle = con.execute("SELECT reset_at FROM log_cycle WHERE id=1").fetchone()
+    now_cycle = datetime.utcnow()
+    if not cycle:
+        con.execute("INSERT INTO log_cycle(id,reset_at) VALUES(1,?)",
+                    ((now_cycle + timedelta(days=1)).isoformat(),))
+    else:
+        try:
+            reset_at = datetime.fromisoformat(cycle["reset_at"])
+        except Exception:
+            reset_at = now_cycle
+        if now_cycle >= reset_at:
+            con.execute("DELETE FROM audit_logs")
+            con.execute("UPDATE log_cycle SET reset_at=? WHERE id=1",
+                        ((now_cycle + timedelta(days=1)).isoformat(),))
     if not con.execute("SELECT 1 FROM server_state WHERE id=1").fetchone():
         con.execute("INSERT INTO server_state(id,title,message,enabled,version,updated) VALUES(1,?,?,?,?,?)",
                     ("Error!","A new update is available. Please update to the latest version.",1,0,datetime.utcnow().isoformat()))
@@ -130,6 +148,15 @@ input,button{width:100%;padding:13px;margin-top:10px;border-radius:9px}input{bac
 
 .toastStack{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:100;width:min(430px,92vw);display:grid;gap:10px;pointer-events:none}.toast{position:relative;overflow:hidden;display:flex;gap:12px;align-items:center;padding:13px 14px;border:1px solid #293249;border-radius:14px;background:#090e18eF;backdrop-filter:blur(18px);box-shadow:0 18px 55px #000b,0 0 30px #7652ff25;animation:toastIn .48s cubic-bezier(.16,.9,.2,1),toastOut .45s ease 3.75s forwards}.toastIcon{width:42px;height:42px;flex:0 0 42px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:linear-gradient(135deg,#5137d8,#a43ff1);box-shadow:0 0 20px #754cff55}.toast b{display:block}.toast small{display:block;color:#9da7ba;margin-top:3px}.toast:after{content:"";position:absolute;bottom:0;left:0;height:2px;width:100%;background:linear-gradient(90deg,#5d7cff,#c13cff,#3eea9b);animation:toastBar 4s linear forwards}@keyframes toastIn{from{opacity:0;transform:translateY(-28px) scale(.92)}}@keyframes toastOut{to{opacity:0;transform:translateY(-20px) scale(.96)}}@keyframes toastBar{to{width:0}}
 .updateBadge{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;font-size:11px;font-weight:900;border:1px solid #2c3448;background:#0b101a}.updateBadge.live{color:#ffc85a;border-color:#62491b;box-shadow:0 0 20px #ffb83d18}.updateBadge.clear{color:#5ceca0;border-color:#19573b}.miniDot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.updateTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.cancelUpdate{width:100%;margin-top:9px;color:#ff7188;background:#260a13;border-color:#6b2031;font-weight:900;cursor:pointer}.logsPage{display:none;animation:sectionIn .5s ease}.logsPage.show{display:block}.logWrap{margin-top:22px;background:#070b13;border:1px solid #1b2434;border-radius:17px;overflow:hidden}.logHead{padding:22px;border-bottom:1px solid #182131}.logItem{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:center;padding:16px 20px;border-top:1px solid #121a28;transition:.25s}.logItem:hover{background:#0a101c;transform:translateX(3px)}.logIcon{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:19px;background:#10172a;border:1px solid #2b3650;box-shadow:0 0 18px #6b55ff18}.logTitle{font-weight:900}.logDetail{font-size:12px;color:#909bb0;margin-top:4px}.logMeta{text-align:right;font-size:11px;color:#747f95}.emptyLogs{text-align:center;color:#788198;padding:55px 20px}
+.logTimer{margin:18px;padding:16px 18px;border:1px solid #28324a;border-radius:16px;background:linear-gradient(135deg,#0b1020,#070a12);position:relative;overflow:hidden;box-shadow:0 12px 40px #0006,0 0 24px #7658ff12}
+.logTimer:before{content:"";position:absolute;inset:-2px;background:linear-gradient(90deg,transparent,#7658ff33,transparent);transform:translateX(-100%);animation:logSweep 3s linear infinite;pointer-events:none}
+@keyframes logSweep{to{transform:translateX(100%)}}
+.logTimerTop{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:15px}
+.logTimerText b{display:block;font-size:13px;letter-spacing:.8px}.logTimerText small{display:block;color:#818ba1;margin-top:5px;line-height:1.4}
+.logClock{display:flex;align-items:center;gap:6px;font-family:monospace}
+.logClockBox{min-width:54px;padding:10px 8px;text-align:center;border-radius:11px;border:1px solid #39435f;background:#040813;color:#e6e2ff;font-size:18px;font-weight:900;box-shadow:inset 0 0 18px #7954ff12,0 0 15px #7954ff10}
+.logClockSep{color:#706a96;font-weight:900}.logProgressTrack{position:relative;z-index:1;height:3px;margin-top:14px;border-radius:10px;background:#151b29;overflow:hidden}.logProgress{height:100%;width:100%;background:linear-gradient(90deg,#6758ff,#b548ff,#43e69b);box-shadow:0 0 10px #7954ff;transition:width 1s linear}
+@media(max-width:600px){.logTimerTop{align-items:flex-start;flex-direction:column}.logClock{width:100%;justify-content:center}.logClockBox{min-width:49px}}
 </style></head><body><div class="bg"></div><div class="shell"><div class="box">
 <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px">
 <button type="button" onclick="setLang('en')" style="width:auto;margin:0;padding:6px 10px;font-size:11px">EN</button>
@@ -163,6 +190,15 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 
 .toastStack{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:100;width:min(430px,92vw);display:grid;gap:10px;pointer-events:none}.toast{position:relative;overflow:hidden;display:flex;gap:12px;align-items:center;padding:13px 14px;border:1px solid #293249;border-radius:14px;background:#090e18eF;backdrop-filter:blur(18px);box-shadow:0 18px 55px #000b,0 0 30px #7652ff25;animation:toastIn .48s cubic-bezier(.16,.9,.2,1),toastOut .45s ease 3.75s forwards}.toastIcon{width:42px;height:42px;flex:0 0 42px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:linear-gradient(135deg,#5137d8,#a43ff1);box-shadow:0 0 20px #754cff55}.toast b{display:block}.toast small{display:block;color:#9da7ba;margin-top:3px}.toast:after{content:"";position:absolute;bottom:0;left:0;height:2px;width:100%;background:linear-gradient(90deg,#5d7cff,#c13cff,#3eea9b);animation:toastBar 4s linear forwards}@keyframes toastIn{from{opacity:0;transform:translateY(-28px) scale(.92)}}@keyframes toastOut{to{opacity:0;transform:translateY(-20px) scale(.96)}}@keyframes toastBar{to{width:0}}
 .updateBadge{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;font-size:11px;font-weight:900;border:1px solid #2c3448;background:#0b101a}.updateBadge.live{color:#ffc85a;border-color:#62491b;box-shadow:0 0 20px #ffb83d18}.updateBadge.clear{color:#5ceca0;border-color:#19573b}.miniDot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.updateTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.cancelUpdate{width:100%;margin-top:9px;color:#ff7188;background:#260a13;border-color:#6b2031;font-weight:900;cursor:pointer}.logsPage{display:none;animation:sectionIn .5s ease}.logsPage.show{display:block}.logWrap{margin-top:22px;background:#070b13;border:1px solid #1b2434;border-radius:17px;overflow:hidden}.logHead{padding:22px;border-bottom:1px solid #182131}.logItem{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:center;padding:16px 20px;border-top:1px solid #121a28;transition:.25s}.logItem:hover{background:#0a101c;transform:translateX(3px)}.logIcon{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:19px;background:#10172a;border:1px solid #2b3650;box-shadow:0 0 18px #6b55ff18}.logTitle{font-weight:900}.logDetail{font-size:12px;color:#909bb0;margin-top:4px}.logMeta{text-align:right;font-size:11px;color:#747f95}.emptyLogs{text-align:center;color:#788198;padding:55px 20px}
+.logTimer{margin:18px;padding:16px 18px;border:1px solid #28324a;border-radius:16px;background:linear-gradient(135deg,#0b1020,#070a12);position:relative;overflow:hidden;box-shadow:0 12px 40px #0006,0 0 24px #7658ff12}
+.logTimer:before{content:"";position:absolute;inset:-2px;background:linear-gradient(90deg,transparent,#7658ff33,transparent);transform:translateX(-100%);animation:logSweep 3s linear infinite;pointer-events:none}
+@keyframes logSweep{to{transform:translateX(100%)}}
+.logTimerTop{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:15px}
+.logTimerText b{display:block;font-size:13px;letter-spacing:.8px}.logTimerText small{display:block;color:#818ba1;margin-top:5px;line-height:1.4}
+.logClock{display:flex;align-items:center;gap:6px;font-family:monospace}
+.logClockBox{min-width:54px;padding:10px 8px;text-align:center;border-radius:11px;border:1px solid #39435f;background:#040813;color:#e6e2ff;font-size:18px;font-weight:900;box-shadow:inset 0 0 18px #7954ff12,0 0 15px #7954ff10}
+.logClockSep{color:#706a96;font-weight:900}.logProgressTrack{position:relative;z-index:1;height:3px;margin-top:14px;border-radius:10px;background:#151b29;overflow:hidden}.logProgress{height:100%;width:100%;background:linear-gradient(90deg,#6758ff,#b548ff,#43e69b);box-shadow:0 0 10px #7954ff;transition:width 1s linear}
+@media(max-width:600px){.logTimerTop{align-items:flex-start;flex-direction:column}.logClock{width:100%;justify-content:center}.logClockBox{min-width:49px}}
 </style></head><body>
 <div class="drawerShade" id="shade" onclick="menu(false)"></div><aside class="drawer" id="drawer"><div class="profile"><div class="avatar2">C</div><h3>Cheto_Admin</h3></div><nav class="nav">
 <a href="#" id="navKeys" class="active" onclick="page('keys');return false"><span>⌘</span><b data-en="Keys Manager" data-ar="إدارة المفاتيح">Keys Manager</b></a>
@@ -189,6 +225,13 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 <div class="serverCard"><div class="serverStatus"><div><h2 data-en="Hack Server Control" data-ar="التحكم بسيرفر الهاك">Hack Server Control</h2><div class="hint" data-en="Enable or completely stop key verification from the server." data-ar="تشغيل أو إيقاف التحقق من المفاتيح بالكامل من السيرفر.">Enable or completely stop key verification from the server.</div><b>{{"ONLINE" if server["enabled"] else "OFFLINE"}}</b></div><div class="lamp {{'' if server['enabled'] else 'off'}}"></div></div>
 <form action="/server/toggle" method="POST"><button class="primary toggleServer">{{"STOP SERVER" if server["enabled"] else "START SERVER"}}</button></form></div></div></section>
 <section class="logsPage" id="logsPage"><div class="logWrap"><div class="logHead"><h2 style="margin:0" data-en="Activity Logs" data-ar="سجل النشاط">Activity Logs</h2><div class="hint" data-en="Recent actions performed from this control panel." data-ar="آخر العمليات التي تمت من لوحة التحكم.">Recent actions performed from this control panel.</div></div>
+<div class="logTimer">
+  <div class="logTimerTop">
+    <div class="logTimerText"><b data-en="24H AUTO CLEANUP" data-ar="الحذف التلقائي خلال 24 ساعة">24H AUTO CLEANUP</b><small data-en="When the countdown reaches zero, all activity logs are deleted automatically." data-ar="عندما يصل العداد إلى الصفر يتم حذف سجل النشاط تلقائياً.">When the countdown reaches zero, all activity logs are deleted automatically.</small></div>
+    <div class="logClock"><span class="logClockBox" id="logH">24</span><span class="logClockSep">:</span><span class="logClockBox" id="logM">00</span><span class="logClockSep">:</span><span class="logClockBox" id="logS">00</span></div>
+  </div>
+  <div class="logProgressTrack"><div class="logProgress" id="logProgress"></div></div>
+</div>
 {% if logs %}{% for l in logs %}<div class="logItem"><div class="logIcon">{{l["icon"]}}</div><div><div class="logTitle">{{l["action"]}}</div><div class="logDetail">{{l["detail"]}}</div></div><div class="logMeta"><b>{{l["device"]}}</b><br>{{l["created_short"]}}</div></div>{% endfor %}{% else %}<div class="emptyLogs">No activity yet</div>{% endif %}</div></section>
 <div class="toastStack" id="toastStack"></div>
 </div>
@@ -199,6 +242,23 @@ function toast(icon,msg){let t=document.createElement("div");t.className="toast"
 {% if notice %}setTimeout(()=>toast({{notice_icon|tojson}},{{notice|tojson}}),250);{% endif %}
 function setLang(l){localStorage.setItem("km_lang",l);document.documentElement.lang=l;document.documentElement.dir=l==="ar"?"rtl":"ltr";document.querySelectorAll("[data-"+l+"]").forEach(e=>e.textContent=e.dataset[l]);document.querySelectorAll('input[placeholder="Days"]').forEach(e=>e.placeholder=l==="ar"?"الأيام":"Days");document.querySelectorAll('input[placeholder="Hours"]').forEach(e=>e.placeholder=l==="ar"?"الساعات":"Hours");document.querySelectorAll('input[placeholder="Devices"]').forEach(e=>e.placeholder=l==="ar"?"الأجهزة":"Devices");document.querySelectorAll('input[placeholder="Custom key"]').forEach(e=>e.placeholder=l==="ar"?"مفتاح مخصص":"Custom key")}
 setLang(localStorage.getItem("km_lang")||"en");page(localStorage.getItem("km_page")||"keys");
+const LOG_RESET_AT = new Date({{ log_reset_at|tojson }} + "Z").getTime();
+function updateLogCountdown(){
+    let left = Math.max(0, Math.floor((LOG_RESET_AT - Date.now()) / 1000));
+    const original = left;
+    const h = Math.floor(left / 3600); left %= 3600;
+    const m = Math.floor(left / 60);
+    const sec = left % 60;
+    const pad = n => String(n).padStart(2,"0");
+    const eh=document.getElementById("logH"), em=document.getElementById("logM"), es=document.getElementById("logS");
+    if(eh){
+        eh.textContent=pad(h); em.textContent=pad(m); es.textContent=pad(sec);
+        document.getElementById("logProgress").style.width=(Math.min(86400,original)/86400*100)+"%";
+    }
+    if(original<=0) setTimeout(()=>location.reload(),1200);
+}
+updateLogCountdown();
+setInterval(updateLogCountdown,1000);
 setInterval(()=>document.querySelectorAll("[data-seconds]").forEach(el=>{let s=parseInt(el.dataset.seconds||0);if(el.dataset.running==="1"&&s>0){s--;el.dataset.seconds=s}let d=Math.floor(s/86400);s%=86400;let h=Math.floor(s/3600);s%=3600;let m=Math.floor(s/60),x=s%60;el.textContent=`${d}D-${h}h-${m}m-${x}s`}),1000);
 </script></body></html>
 """
@@ -238,6 +298,8 @@ def home():
         x["used_devices"]=con.execute("SELECT COUNT(*) c FROM key_devices WHERE key=?",(r["key"],)).fetchone()["c"]
         items.append(x)
     server=con.execute("SELECT * FROM server_state WHERE id=1").fetchone()
+    cycle=con.execute("SELECT reset_at FROM log_cycle WHERE id=1").fetchone()
+    log_reset_at=cycle["reset_at"] if cycle else (datetime.utcnow()+timedelta(days=1)).isoformat()
     logrows=con.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 60").fetchall()
     icons={"KEY_CREATED":"✦","KEY_ADDED":"＋","KEY_STOPPED":"Ⅱ","KEY_STARTED":"▶","KEY_DELETED":"×","UPDATE_SENT":"↑","UPDATE_CANCELLED":"↶","SERVER_STOPPED":"■","SERVER_STARTED":"●"}
     logs=[]
@@ -249,7 +311,7 @@ def home():
         logs.append(z)
     con.close()
     notice=session.pop("notice",None);notice_icon=session.pop("notice_icon","✓")
-    return render_template_string(PANEL_HTML,keys=items,server=server,logs=logs,notice=notice,notice_icon=notice_icon)
+    return render_template_string(PANEL_HTML,keys=items,server=server,logs=logs,notice=notice,notice_icon=notice_icon,log_reset_at=log_reset_at)
 
 @app.route("/generate",methods=["POST"])
 def generate():

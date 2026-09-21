@@ -241,7 +241,12 @@ function page(p){let k=p==="keys",sv=p==="server",lg=p==="logs";document.getElem
 function toast(icon,msg){let t=document.createElement("div");t.className="toast";t.innerHTML=`<div class="toastIcon">${icon}</div><div><b>Cheto</b><small>${msg}</small></div>`;document.getElementById("toastStack").appendChild(t);setTimeout(()=>t.remove(),4300)}
 {% if notice %}setTimeout(()=>toast({{notice_icon|tojson}},{{notice|tojson}}),250);{% endif %}
 function setLang(l){localStorage.setItem("km_lang",l);document.documentElement.lang=l;document.documentElement.dir=l==="ar"?"rtl":"ltr";document.querySelectorAll("[data-"+l+"]").forEach(e=>e.textContent=e.dataset[l]);document.querySelectorAll('input[placeholder="Days"]').forEach(e=>e.placeholder=l==="ar"?"الأيام":"Days");document.querySelectorAll('input[placeholder="Hours"]').forEach(e=>e.placeholder=l==="ar"?"الساعات":"Hours");document.querySelectorAll('input[placeholder="Devices"]').forEach(e=>e.placeholder=l==="ar"?"الأجهزة":"Devices");document.querySelectorAll('input[placeholder="Custom key"]').forEach(e=>e.placeholder=l==="ar"?"مفتاح مخصص":"Custom key")}
-setLang(localStorage.getItem("km_lang")||"en");page(localStorage.getItem("km_page")||"keys");
+setLang(localStorage.getItem("km_lang")||"en");
+{% if force_keys %}
+localStorage.setItem("km_page","keys");page("keys");
+{% else %}
+page(localStorage.getItem("km_page")||"keys");
+{% endif %}
 const LOG_RESET_AT = new Date({{ log_reset_at|tojson }} + "Z").getTime();
 function updateLogCountdown(){
     let left = Math.max(0, Math.floor((LOG_RESET_AT - Date.now()) / 1000));
@@ -279,6 +284,7 @@ def home():
             password=request.form.get("password","")
             if ADMIN_PASSWORD and secrets.compare_digest(password,ADMIN_PASSWORD):
                 session["admin"]=True
+                session["open_keys_after_login"]=True
                 return redirect("/")
             error="Wrong password"
         return render_template_string(LOGIN_HTML,error=error)
@@ -311,7 +317,8 @@ def home():
         logs.append(z)
     con.close()
     notice=session.pop("notice",None);notice_icon=session.pop("notice_icon","✓")
-    return render_template_string(PANEL_HTML,keys=items,server=server,logs=logs,notice=notice,notice_icon=notice_icon,log_reset_at=log_reset_at)
+    force_keys=session.pop("open_keys_after_login",False)
+    return render_template_string(PANEL_HTML,keys=items,server=server,logs=logs,notice=notice,notice_icon=notice_icon,log_reset_at=log_reset_at,force_keys=force_keys)
 
 @app.route("/generate",methods=["POST"])
 def generate():

@@ -1,83 +1,88 @@
 from flask import Flask, request, jsonify, render_template_string, redirect, session, send_from_directory
 import sqlite3, secrets, string, os
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:
+    psycopg = None
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-key")
-# IMPORTANT: point this at a persistent disk on hosts such as Render.
-# Example Render env: DATA_DIR=/var/data
-DATA_DIR = os.environ.get("DATA_DIR", os.environ.get("RENDER_DISK_PATH", "."))
-os.makedirs(DATA_DIR, exist_ok=True)
-DB = os.path.join(DATA_DIR, "keys.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+DB = os.environ.get("SQLITE_PATH", "keys.db")
+
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 LOGIN_IMAGE = "-5877288279722364578_121.jpg"
 PANEL_IMAGE = "meer.jpg"
 
+class DBConnection:
+    def __init__(self, con, postgres=False):
+        self._con=con; self.postgres=postgres
+    def execute(self, sql, params=()):
+        if self.postgres:
+            cur=self._con.cursor()
+            cur.execute(sql.replace("?", "%s"), params)
+            return cur
+        return self._con.execute(sql, params)
+    def commit(self): return self._con.commit()
+    def close(self): return self._con.close()
+
+def _connect():
+    if DATABASE_URL:
+        if psycopg is None:
+            raise RuntimeError("Install psycopg[binary] to use DATABASE_URL")
+        return DBConnection(psycopg.connect(DATABASE_URL,row_factory=dict_row),True)
+    con=sqlite3.connect(DB); con.row_factory=sqlite3.Row
+    return DBConnection(con,False)
+
+def _columns(con, table):
+    if con.postgres:
+        rows=con.execute("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=?",(table,)).fetchall()
+        return {r["column_name"] for r in rows}
+    return {r["name"] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
+
 def db():
-    con = sqlite3.connect(DB)
-    con.row_factory = sqlite3.Row
+    con=_connect()
     con.execute("""CREATE TABLE IF NOT EXISTS keys(
-        key TEXT PRIMARY KEY,
-        expiry TEXT NOT NULL,
-        active INTEGER NOT NULL DEFAULT 1,
-        created TEXT NOT NULL
-    )""")
-    cols = {r["name"] for r in con.execute("PRAGMA table_info(keys)").fetchall()}
-    migrations = {
-        "max_devices": "ALTER TABLE keys ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1",
-        "paused_seconds": "ALTER TABLE keys ADD COLUMN paused_seconds INTEGER",
-        "stopped": "ALTER TABLE keys ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0"
-    }
-    for name, sql in migrations.items():
-        if name not in cols:
-            con.execute(sql)
+        key TEXT PRIMARY KEY, expiry TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created TEXT NOT NULL)""")
+    cols=_columns(con,"keys")
+    for name,sql in {
+        "max_devices":"ALTER TABLE keys ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1",
+        "paused_seconds":"ALTER TABLE keys ADD COLUMN paused_seconds INTEGER",
+        "stopped":"ALTER TABLE keys ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0"}.items():
+        if name not in cols: con.execute(sql)
+
     con.execute("""CREATE TABLE IF NOT EXISTS server_state(
-        id INTEGER PRIMARY KEY CHECK(id=1),
-        title TEXT NOT NULL,
-        message TEXT NOT NULL,
-        enabled INTEGER NOT NULL DEFAULT 1,
-        version INTEGER NOT NULL DEFAULT 0,
-        updated TEXT NOT NULL
-    )""")
-    state_cols = {r["name"] for r in con.execute("PRAGMA table_info(server_state)").fetchall()}
-    if "update_active" not in state_cols:
+        id INTEGER PRIMARY KEY, title TEXT NOT NULL, message TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1, version INTEGER NOT NULL DEFAULT 0, updated TEXT NOT NULL)""")
+    if "update_active" not in _columns(con,"server_state"):
         con.execute("ALTER TABLE server_state ADD COLUMN update_active INTEGER NOT NULL DEFAULT 0")
-    con.execute("""CREATE TABLE IF NOT EXISTS audit_logs(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        action TEXT NOT NULL,
-        detail TEXT NOT NULL,
-        device TEXT NOT NULL,
-        ip TEXT NOT NULL,
-        created TEXT NOT NULL
-    )""")
-    con.execute("""CREATE TABLE IF NOT EXISTS log_cycle(
-        id INTEGER PRIMARY KEY CHECK(id=1),
-        reset_at TEXT NOT NULL
-    )""")
-    cycle = con.execute("SELECT reset_at FROM log_cycle WHERE id=1").fetchone()
-    now_cycle = datetime.utcnow()
+
+    audit_id="BIGSERIAL PRIMARY KEY" if con.postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    con.execute(f"""CREATE TABLE IF NOT EXISTS audit_logs(
+        id {audit_id}, action TEXT NOT NULL, detail TEXT NOT NULL,
+        device TEXT NOT NULL, ip TEXT NOT NULL, created TEXT NOT NULL)""")
+    con.execute("""CREATE TABLE IF NOT EXISTS log_cycle(id INTEGER PRIMARY KEY,reset_at TEXT NOT NULL)""")
+
+    cycle=con.execute("SELECT reset_at FROM log_cycle WHERE id=1").fetchone()
+    now_cycle=datetime.utcnow()
     if not cycle:
-        con.execute("INSERT INTO log_cycle(id,reset_at) VALUES(1,?)",
-                    ((now_cycle + timedelta(days=1)).isoformat(),))
+        con.execute("INSERT INTO log_cycle(id,reset_at) VALUES(1,?)",((now_cycle+timedelta(days=1)).isoformat(),))
     else:
-        try:
-            reset_at = datetime.fromisoformat(cycle["reset_at"])
-        except Exception:
-            reset_at = now_cycle
-        if now_cycle >= reset_at:
+        try: reset_at=datetime.fromisoformat(cycle["reset_at"])
+        except Exception: reset_at=now_cycle
+        if now_cycle>=reset_at:
             con.execute("DELETE FROM audit_logs")
-            con.execute("UPDATE log_cycle SET reset_at=? WHERE id=1",
-                        ((now_cycle + timedelta(days=1)).isoformat(),))
+            con.execute("UPDATE log_cycle SET reset_at=? WHERE id=1",((now_cycle+timedelta(days=1)).isoformat(),))
+
     if not con.execute("SELECT 1 FROM server_state WHERE id=1").fetchone():
         con.execute("INSERT INTO server_state(id,title,message,enabled,version,updated) VALUES(1,?,?,?,?,?)",
                     ("Error!","A new update is available. Please update to the latest version.",1,0,datetime.utcnow().isoformat()))
+
     con.execute("""CREATE TABLE IF NOT EXISTS key_devices(
-        key TEXT NOT NULL,
-        device_id TEXT NOT NULL,
-        first_seen TEXT NOT NULL,
-        PRIMARY KEY(key, device_id)
-    )""")
+        key TEXT NOT NULL,device_id TEXT NOT NULL,first_seen TEXT NOT NULL,PRIMARY KEY(key,device_id))""")
     con.commit()
     return con
 
@@ -140,38 +145,34 @@ def random_key(days,hours):
     return result[:25]
 
 LOGIN_HTML=r"""
-<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Key Manager</title><style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0d1117;color:#fff;font-family:Arial,sans-serif;display:grid;place-items:center;overflow:hidden}
-.bg{position:fixed;inset:-15%;background:radial-gradient(circle at 20% 20%,#25144c88,transparent 28%),radial-gradient(circle at 80% 80%,#47121e66,transparent 30%);filter:blur(30px);animation:bg 7s ease-in-out infinite alternate}
-@keyframes bg{to{transform:scale(1.12) rotate(4deg)}}.shell{position:relative;width:min(390px,91vw);padding:2px;border-radius:20px;background:linear-gradient(90deg,#ff335f,#754cff,#2dd4ff,#ff335f);background-size:250%;animation:border 5s linear infinite;box-shadow:0 0 50px #744cff33}
-@keyframes border{to{background-position:250%}}.box{background:#161b22;border-radius:18px;padding:27px}.box h2{margin:0 0 12px;font-size:28px}
-.avatar{width:60%;aspect-ratio:1/1;margin:0 auto 17px;border-radius:15px;overflow:hidden;border:1px solid #30394a;box-shadow:0 0 28px #704cff25;animation:float 3.2s ease-in-out infinite}
-.avatar img{width:100%;height:100%;object-fit:cover}@keyframes float{50%{transform:translateY(-5px)}}p{color:#b8beca}
-input,button{width:100%;padding:13px;margin-top:10px;border-radius:9px}input{background:#0d1117;color:#fff;border:1px solid #394150;outline:none}button{border:0;color:#fff;font-weight:800;background:linear-gradient(90deg,#633bff,#a53cff);cursor:pointer;transition:.2s}button:active{transform:scale(.97)}.error{color:#ff637d}
-
-.toastStack{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:100;width:min(430px,92vw);display:grid;gap:10px;pointer-events:none}.toast{position:relative;overflow:hidden;display:flex;gap:12px;align-items:center;padding:13px 14px;border:1px solid #293249;border-radius:14px;background:#090e18eF;backdrop-filter:blur(18px);box-shadow:0 18px 55px #000b,0 0 30px #7652ff25;animation:toastIn .48s cubic-bezier(.16,.9,.2,1),toastOut .45s ease 3.75s forwards}.toastIcon{width:42px;height:42px;flex:0 0 42px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:linear-gradient(135deg,#5137d8,#a43ff1);box-shadow:0 0 20px #754cff55}.toast b{display:block}.toast small{display:block;color:#9da7ba;margin-top:3px}.toast:after{content:"";position:absolute;bottom:0;left:0;height:2px;width:100%;background:linear-gradient(90deg,#5d7cff,#c13cff,#3eea9b);animation:toastBar 4s linear forwards}@keyframes toastIn{from{opacity:0;transform:translateY(-28px) scale(.92)}}@keyframes toastOut{to{opacity:0;transform:translateY(-20px) scale(.96)}}@keyframes toastBar{to{width:0}}
-.updateBadge{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;font-size:11px;font-weight:900;border:1px solid #2c3448;background:#0b101a}.updateBadge.live{color:#ffc85a;border-color:#62491b;box-shadow:0 0 20px #ffb83d18}.updateBadge.clear{color:#5ceca0;border-color:#19573b}.miniDot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.updateTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.cancelUpdate{width:100%;margin-top:9px;color:#ff7188;background:#260a13;border-color:#6b2031;font-weight:900;cursor:pointer}.logsPage{display:none;animation:sectionIn .5s ease}.logsPage.show{display:block}.logWrap{margin-top:22px;background:#070b13;border:1px solid #1b2434;border-radius:17px;overflow:hidden}.logHead{padding:22px;border-bottom:1px solid #182131}.logItem{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:center;padding:16px 20px;border-top:1px solid #121a28;transition:.25s}.logItem:hover{background:#0a101c;transform:translateX(3px)}.logIcon{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:19px;background:#10172a;border:1px solid #2b3650;box-shadow:0 0 18px #6b55ff18}.logTitle{font-weight:900}.logDetail{font-size:12px;color:#909bb0;margin-top:4px}.logMeta{text-align:right;font-size:11px;color:#747f95}.emptyLogs{text-align:center;color:#788198;padding:55px 20px}
-.logTimer{margin:18px;padding:16px 18px;border:1px solid #28324a;border-radius:16px;background:linear-gradient(135deg,#0b1020,#070a12);position:relative;overflow:hidden;box-shadow:0 12px 40px #0006,0 0 24px #7658ff12}
-.logTimer:before{content:"";position:absolute;inset:-2px;background:linear-gradient(90deg,transparent,#7658ff33,transparent);transform:translateX(-100%);animation:logSweep 3s linear infinite;pointer-events:none}
-@keyframes logSweep{to{transform:translateX(100%)}}
-.logTimerTop{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:15px}
-.logTimerText b{display:block;font-size:13px;letter-spacing:.8px}.logTimerText small{display:block;color:#818ba1;margin-top:5px;line-height:1.4}
-.logClock{display:flex;align-items:center;gap:6px;font-family:monospace}
-.logClockBox{min-width:54px;padding:10px 8px;text-align:center;border-radius:11px;border:1px solid #39435f;background:#040813;color:#e6e2ff;font-size:18px;font-weight:900;box-shadow:inset 0 0 18px #7954ff12,0 0 15px #7954ff10}
-.logClockSep{color:#706a96;font-weight:900}.logProgressTrack{position:relative;z-index:1;height:3px;margin-top:14px;border-radius:10px;background:#151b29;overflow:hidden}.logProgress{height:100%;width:100%;background:linear-gradient(90deg,#6758ff,#b548ff,#43e69b);box-shadow:0 0 10px #7954ff;transition:width 1s linear}
-@media(max-width:600px){.logTimerTop{align-items:flex-start;flex-direction:column}.logClock{width:100%;justify-content:center}.logClockBox{min-width:49px}}
-</style></head><body><div class="bg"></div><div class="shell"><div class="box">
-<div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px">
-<button type="button" onclick="setLang('en')" style="width:auto;margin:0;padding:6px 10px;font-size:11px">EN</button>
-<button type="button" onclick="setLang('ar')" style="width:auto;margin:0;padding:6px 10px;font-size:11px">العربية</button>
-</div><h2 data-en="Key Manager" data-ar="إدارة المفاتيح">Key Manager</h2><div class="avatar"><img src="/login-image" alt=""></div><p data-en="Admin Login" data-ar="تسجيل دخول المدير">Admin Login</p>
-{% if error %}<p class="error">{{error}}</p>{% endif %}
-<form method="POST"><input id="loginPass" type="password" name="password" placeholder="Password" required><button data-en="Login" data-ar="دخول">Login</button></form>
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#03040a"><title>Cheto • Secure Access</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,Arial,sans-serif;color:#f8f9ff}body{min-height:100vh;display:grid;place-items:center;overflow:hidden;background:#03040a}
+.scene{position:fixed;inset:0;overflow:hidden;background:radial-gradient(circle at 16% 20%,#5225a944,transparent 28%),radial-gradient(circle at 84% 76%,#0b82a83a,transparent 29%),radial-gradient(circle at 55% 45%,#8b2e7930,transparent 25%),#03040a}
+.orb{position:absolute;border-radius:50%;opacity:.55;animation:drift 12s ease-in-out infinite alternate}.o1{width:420px;height:420px;left:-180px;top:-110px;background:#6f38ff26;box-shadow:0 0 110px #6f38ff55}.o2{width:330px;height:330px;right:-130px;bottom:-90px;background:#15d9ff1d;box-shadow:0 0 120px #15d9ff44;animation-delay:-4s}@keyframes drift{to{transform:translate(45px,35px) scale(1.13) rotate(18deg)}}
+.grid{position:absolute;inset:-30%;opacity:.14;background-image:linear-gradient(#8f85ff18 1px,transparent 1px),linear-gradient(90deg,#8f85ff18 1px,transparent 1px);background-size:48px 48px;transform:perspective(700px) rotateX(64deg) translateY(25%);animation:grid 14s linear infinite}@keyframes grid{to{background-position:0 96px,96px 0}}
+.wrap{position:relative;z-index:2;width:min(940px,94vw);display:grid;grid-template-columns:1.02fr .98fr;border:1px solid #ffffff18;border-radius:30px;overflow:hidden;background:#090b14d9;backdrop-filter:blur(28px);box-shadow:0 35px 100px #000c,0 0 90px #6548ff16;animation:enter .85s cubic-bezier(.16,.85,.2,1)}@keyframes enter{from{opacity:0;transform:translateY(28px) scale(.965);filter:blur(10px)}}
+.visual{position:relative;min-height:570px;padding:34px;overflow:hidden;background:linear-gradient(145deg,#111329,#070912)}.visual:before{content:"";position:absolute;inset:-80%;background:conic-gradient(from 0deg,transparent,#7654ff25,transparent 22%,#25d5ff18,transparent 43%);animation:spin 13s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.photo{position:relative;width:100%;height:100%;min-height:500px;border-radius:23px;overflow:hidden;border:1px solid #ffffff1c;box-shadow:inset 0 0 60px #0007,0 20px 65px #0008;animation:float 5s ease-in-out infinite}@keyframes float{50%{transform:translateY(-7px) rotate(.25deg)}}.photo img{width:100%;height:100%;object-fit:cover;display:block;transform:scale(1.025)}.photo:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 48%,#050710e8)}
+.brand{position:absolute;left:57px;bottom:60px;z-index:3}.brand small{letter-spacing:4px;color:#a8a7bd;font-size:10px}.brand h1{font-size:34px;margin:7px 0}.live{display:inline-flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #5df0ae35;border-radius:999px;background:#071912aa;color:#71efb6;font-size:10px;font-weight:900;letter-spacing:1.2px}.dot{width:7px;height:7px;border-radius:50%;background:#58f0a9;box-shadow:0 0 15px #58f0a9;animation:pulse 1.5s infinite}@keyframes pulse{50%{opacity:.3;transform:scale(.7)}}
+.login{position:relative;padding:56px 52px;display:flex;flex-direction:column;justify-content:center;background:linear-gradient(155deg,#0d0f19e8,#070811f2)}.top{display:flex;justify-content:space-between;align-items:center;position:absolute;top:28px;left:52px;right:52px}.shield{font-size:10px;color:#838aa0;letter-spacing:1.4px}.lang{display:flex;padding:3px;border:1px solid #242a3a;border-radius:10px;background:#060811}.lang button{border:0;background:transparent;color:#747d91;padding:7px 9px;border-radius:7px;cursor:pointer;font-weight:800}.lang button:hover{background:#171b29;color:#fff}
+.kicker{color:#8c7bff;font-size:10px;font-weight:900;letter-spacing:3.3px;margin-bottom:13px}.login h2{font-size:37px;line-height:1.05;margin:0;letter-spacing:-1.7px}.sub{color:#81899d;font-size:13px;line-height:1.65;margin:15px 0 27px}
+.field{position:relative}.field input{width:100%;height:58px;border:1px solid #252c3c;border-radius:15px;background:#050711;color:#fff;padding:0 52px 0 17px;outline:none;font-size:14px;transition:.3s}.field input:focus{border-color:#7564ff;box-shadow:0 0 0 4px #765bff16,0 0 35px #765bff16;transform:translateY(-2px)}.eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:0;border-radius:10px;background:#111521;color:#8f98aa;cursor:pointer}
+.submit{position:relative;width:100%;height:56px;margin-top:14px;border:0;border-radius:15px;color:#fff;font-weight:900;letter-spacing:.6px;cursor:pointer;overflow:hidden;background:linear-gradient(100deg,#6447ff,#a946f4,#287cf5);background-size:220%;box-shadow:0 14px 35px #6648ff2d;transition:.25s;animation:gradient 5s linear infinite}.submit:before{content:"";position:absolute;top:-100%;left:-35%;width:28%;height:300%;background:#ffffff36;transform:rotate(25deg);animation:shine 3.8s ease-in-out infinite}@keyframes shine{0%,55%{left:-40%}80%,100%{left:125%}}@keyframes gradient{50%{background-position:100%}}.submit:hover{transform:translateY(-3px);box-shadow:0 18px 45px #7654ff45}
+.error{margin:0 0 13px;padding:11px 13px;border:1px solid #ff536f42;border-radius:12px;background:#3a0b162f;color:#ff7c91;font-size:12px;animation:shake .35s ease}@keyframes shake{25%{transform:translateX(-5px)}50%{transform:translateX(5px)}}.foot{margin-top:20px;color:#596176;font-size:10px}
+.scan{position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#7d6cffaa,transparent);box-shadow:0 0 16px #7d6cff;animation:scan 5.5s linear infinite;opacity:.35}@keyframes scan{from{top:0}to{top:100%}}
+@media(max-width:760px){body{overflow:auto}.wrap{grid-template-columns:1fr;width:min(440px,93vw);margin:22px 0}.visual{min-height:270px;padding:18px}.photo{min-height:250px}.brand{left:38px;bottom:38px}.login{padding:76px 27px 36px}.top{left:27px;right:27px;top:25px}.login h2{font-size:32px}}
+</style></head><body>
+<div class="scene"><div class="grid"></div><div class="orb o1"></div><div class="orb o2"></div></div>
+<main class="wrap"><section class="visual"><div class="scan"></div><div class="photo"><img src="/login-image" alt=""></div><div class="brand"><small>CHETO // CONTROL</small><h1>Midnight Access</h1><span class="live"><i class="dot"></i>SYSTEM READY</span></div></section>
+<section class="login"><div class="top"><span class="shield">◆ SECURE CONSOLE</span><div class="lang"><button type="button" onclick="setLang('en')">EN</button><button type="button" onclick="setLang('ar')">عربي</button></div></div><div class="kicker" data-en="ADMINISTRATION NODE" data-ar="بوابة الإدارة">ADMINISTRATION NODE</div><h2 data-en="Welcome back." data-ar="مرحباً بعودتك.">Welcome back.</h2><p class="sub" data-en="Authenticate to enter your private control environment." data-ar="سجّل الدخول للوصول إلى بيئة التحكم الخاصة بك.">Authenticate to enter your private control environment.</p>
+{% if error %}<div class="error" data-en="Access denied • Check your password" data-ar="تم رفض الدخول • تحقق من كلمة المرور">Access denied • Check your password</div>{% endif %}
+<form method="POST" id="loginForm"><div class="field"><input id="loginPass" type="password" name="password" placeholder="Admin password" autocomplete="current-password" required autofocus><button class="eye" type="button" onclick="togglePass()">◉</button></div><button class="submit" id="loginBtn" data-en="ENTER CONTROL" data-ar="دخول لوحة التحكم">ENTER CONTROL</button></form><div class="foot" data-en="● Protected session • Authorized access only" data-ar="● جلسة محمية • وصول مصرح فقط">● Protected session • Authorized access only</div></section></main>
 <script>
-function setLang(l){localStorage.setItem("km_lang",l);document.documentElement.lang=l;document.documentElement.dir=l==="ar"?"rtl":"ltr";document.querySelectorAll("[data-"+l+"]").forEach(e=>e.textContent=e.dataset[l]);document.getElementById("loginPass").placeholder=l==="ar"?"كلمة المرور":"Password"}
-setLang(localStorage.getItem("km_lang")||"en");
-</script></div></div></body></html>
+function setLang(l){localStorage.setItem("km_lang",l);document.documentElement.lang=l;document.documentElement.dir=l==="ar"?"rtl":"ltr";document.querySelectorAll("[data-"+l+"]").forEach(e=>e.textContent=e.dataset[l]);document.getElementById("loginPass").placeholder=l==="ar"?"كلمة مرور المدير":"Admin password"}
+function togglePass(){let p=document.getElementById("loginPass");p.type=p.type==="password"?"text":"password"}
+document.getElementById("loginForm").addEventListener("submit",()=>{let b=document.getElementById("loginBtn");b.textContent=document.documentElement.lang==="ar"?"جاري التحقق...":"AUTHENTICATING...";b.style.pointerEvents="none";b.style.opacity=".78"});setLang(localStorage.getItem("km_lang")||"en");
+</script></body></html>
 """
 
 PANEL_HTML=r"""
@@ -346,9 +347,10 @@ def add_key():
     if not key:return redirect("/")
     duration,_,_=duration_from_form();limit=max_devices_from_form();now=datetime.utcnow()
     con=db()
-    con.execute("INSERT OR REPLACE INTO keys(key,expiry,active,created,max_devices,paused_seconds,stopped) VALUES(?,?,?,?,?,NULL,0)",
-                (key,(now+duration).isoformat(),1,now.isoformat(),limit))
     con.execute("DELETE FROM key_devices WHERE key=?",(key,))
+    con.execute("DELETE FROM keys WHERE key=?",(key,))
+    con.execute("INSERT INTO keys(key,expiry,active,created,max_devices,paused_seconds,stopped) VALUES(?,?,?,?,?,NULL,0)",
+                (key,(now+duration).isoformat(),1,now.isoformat(),limit))
     add_log(con,"KEY_ADDED",f"Added custom key {key} • limit {limit} device(s)")
     con.commit();con.close();session["notice"]="Custom key added successfully";session["notice_icon"]="＋";return redirect("/")
 

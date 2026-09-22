@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, render_template_string, redirect, session, send_from_directory
-import sqlite3, secrets, string, os
+import sqlite3, secrets, string, os, time
 try:
     import psycopg
     from psycopg.rows import dict_row
@@ -13,6 +13,11 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 DB = os.environ.get("SQLITE_PATH", "keys.db")
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+SESSION_HOURS = int(os.environ.get("SESSION_HOURS", "12"))
+VERIFY_RATE_LIMIT = int(os.environ.get("VERIFY_RATE_LIMIT", "120"))
+app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE","1")=="1",
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=SESSION_HOURS))
 
 LOGIN_IMAGE = "-5877288279722364578_121.jpg"
 PANEL_IMAGE = "meer.jpg"
@@ -83,6 +88,7 @@ def db():
 
     con.execute("""CREATE TABLE IF NOT EXISTS key_devices(
         key TEXT NOT NULL,device_id TEXT NOT NULL,first_seen TEXT NOT NULL,PRIMARY KEY(key,device_id))""")
+    con.execute("""CREATE TABLE IF NOT EXISTS app_meta(name TEXT PRIMARY KEY,value TEXT NOT NULL)""")
     con.commit()
     return con
 
@@ -129,6 +135,23 @@ def max_devices_from_form():
     try: n=int(request.form.get("max_devices",1))
     except: n=1
     return max(1,min(100,n))
+
+_verify_hits={}
+def _rate_ok():
+    ip=(request.headers.get("X-Forwarded-For") or request.remote_addr or "unknown").split(",")[0].strip()
+    now=time.time(); bucket=_verify_hits.setdefault(ip,[])
+    bucket[:]=[x for x in bucket if now-x<60]
+    if len(bucket)>=VERIFY_RATE_LIMIT:return False
+    bucket.append(now);return True
+
+def _stats(con):
+    rows=con.execute("SELECT * FROM keys").fetchall();active=stopped=expired=0
+    for r in rows:
+        if seconds_left(r)<=0:expired+=1
+        elif r["stopped"] or not r["active"]:stopped+=1
+        else:active+=1
+    devices=con.execute("SELECT COUNT(*) c FROM key_devices").fetchone()["c"]
+    return {"total":len(rows),"active":active,"stopped":stopped,"expired":expired,"devices":devices}
 
 def random_key(days,hours):
     # Exactly 25 characters total, always starts with Cheto.
@@ -205,15 +228,23 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 .logClockBox{min-width:54px;padding:10px 8px;text-align:center;border-radius:11px;border:1px solid #39435f;background:#040813;color:#e6e2ff;font-size:18px;font-weight:900;box-shadow:inset 0 0 18px #7954ff12,0 0 15px #7954ff10}
 .logClockSep{color:#706a96;font-weight:900}.logProgressTrack{position:relative;z-index:1;height:3px;margin-top:14px;border-radius:10px;background:#151b29;overflow:hidden}.logProgress{height:100%;width:100%;background:linear-gradient(90deg,#6758ff,#b548ff,#43e69b);box-shadow:0 0 10px #7954ff;transition:width 1s linear}
 @media(max-width:600px){.logTimerTop{align-items:flex-start;flex-direction:column}.logClock{width:100%;justify-content:center}.logClockBox{min-width:49px}}
-</style></head><body>
+.dashboardPage{display:none;animation:sectionIn .5s ease}.dashboardPage.show{display:block}.dashGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:22px}.statCard{position:relative;overflow:hidden;background:linear-gradient(145deg,#0a0f1a,#060910);border:1px solid #202a3b;border-radius:17px;padding:20px;box-shadow:0 16px 45px #0005}.statCard:after{content:"";position:absolute;width:80px;height:80px;right:-25px;top:-25px;border-radius:50%;background:#7954ff18;box-shadow:0 0 45px #7954ff28}.statCard small{display:block;color:#7f899f;letter-spacing:1.5px;font-weight:900}.statCard strong{display:block;font-size:31px;margin:10px 0 5px}.statCard span{font-size:11px;color:#737e94}.statCard.good strong{color:#52eca0}.statCard.warn strong{color:#ffc45d}.statCard.bad strong{color:#ff687f}.dashWelcome{margin-top:16px}@media(max-width:760px){.dashGrid{grid-template-columns:1fr 1fr}}</style></head><body>
 <div class="drawerShade" id="shade" onclick="menu(false)"></div><aside class="drawer" id="drawer"><div class="profile"><div class="avatar2">C</div><h3>Cheto_Admin</h3></div><nav class="nav">
+<a href="#" id="navDashboard" onclick="page('dashboard');return false"><span>◇</span><b data-en="Dashboard" data-ar="لوحة المعلومات">Dashboard</b></a>
 <a href="#" id="navKeys" class="active" onclick="page('keys');return false"><span>⌘</span><b data-en="Keys Manager" data-ar="إدارة المفاتيح">Keys Manager</b></a>
 <a href="#" id="navServer" onclick="page('server');return false"><span>◈</span><b data-en="Server Manager" data-ar="إدارة السيرفر">Server Manager</b></a>
 <a href="#" id="navLogs" onclick="page('logs');return false"><span>≡</span><b data-en="Activity Logs" data-ar="سجل النشاط">Activity Logs</b></a></nav></aside>
 <div class="wrap"><div class="top"><div><div class="eyebrow">MIDNIGHT CONTROL</div><div class="title" data-en="Key Manager" data-ar="إدارة المفاتيح">Key Manager</div></div>
 <div class="topright"><div><a class="logout" href="/logout" data-en="Logout" data-ar="تسجيل الخروج">Logout</a><div class="lang"><button onclick="setLang('en')">EN</button><button onclick="setLang('ar')">عربي</button></div></div><button class="menuBtn" onclick="menu(true)">☰</button></div></div>
 
-<section class="keysPage show" id="keysPage">
+<section class="dashboardPage" id="dashboardPage"><div class="dashGrid">
+<div class="statCard"><small>TOTAL KEYS</small><strong>{{stats["total"]}}</strong><span>All issued access keys</span></div>
+<div class="statCard good"><small>ACTIVE</small><strong>{{stats["active"]}}</strong><span>Currently usable</span></div>
+<div class="statCard warn"><small>STOPPED</small><strong>{{stats["stopped"]}}</strong><span>Paused access</span></div>
+<div class="statCard bad"><small>EXPIRED</small><strong>{{stats["expired"]}}</strong><span>Expired access</span></div>
+<div class="statCard"><small>DEVICES</small><strong>{{stats["devices"]}}</strong><span>Registered devices</span></div>
+<div class="statCard"><small>SERVER</small><strong>{{"ONLINE" if server["enabled"] else "OFFLINE"}}</strong><span>Verification status</span></div>
+</div><div class="serverCard dashWelcome"><h2>Control Center</h2><div class="hint">Live overview of keys, devices and verification server.</div><span class="updateBadge {{'live' if server['update_active'] else 'clear'}}"><i class="miniDot"></i>{{"UPDATE LIVE" if server["update_active"] else "SYSTEM NORMAL"}}</span></div></section><section class="keysPage show" id="keysPage">
 <div class="hero-border"><div class="hero"><img src="/meer.jpg" alt="meer"></div></div><div class="grid">
 <div class="motion-border"><div class="card"><h3 data-en="Generate Key" data-ar="إنشاء مفتاح">Generate Key</h3><div class="hint" data-en="Random 25-character Cheto key with days, hours and device limit." data-ar="إنشاء مفتاح Cheto عشوائي مع تحديد الأيام والساعات وعدد الأجهزة.">Random 25-character Cheto key with days, hours and device limit.</div><form action="/generate" method="POST"><div class="fields"><input type="number" name="days" value="30" min="0" placeholder="Days"><input type="number" name="hours" value="0" min="0" placeholder="Hours"><input type="number" name="max_devices" value="1" min="1" max="100" placeholder="Devices"></div><button class="primary" data-en="Generate Key" data-ar="إنشاء المفتاح">Generate Key</button></form></div></div>
 <div class="motion-border"><div class="card"><h3 data-en="Add Custom Key" data-ar="إضافة مفتاح مخصص">Add Custom Key</h3><div class="hint" data-en="Custom key with days, hours and up to 100 devices." data-ar="مفتاح مخصص مع الأيام والساعات وحتى 100 جهاز.">Custom key with days, hours and up to 100 devices.</div><form action="/add" method="POST"><div class="custom fields"><input name="key" placeholder="Custom key" required><input type="number" name="days" value="30" min="0" placeholder="Days"><input type="number" name="hours" value="0" min="0" placeholder="Hours"><input type="number" name="max_devices" value="1" min="1" max="100" placeholder="Devices"></div><button class="primary" data-en="Add Key" data-ar="إضافة المفتاح">Add Key</button></form></div></div></div>
@@ -243,7 +274,7 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 </div>
 <script>
 function menu(x){document.getElementById("drawer").classList.toggle("show",x);document.getElementById("shade").classList.toggle("show",x)}
-function page(p){let k=p==="keys",sv=p==="server",lg=p==="logs";document.getElementById("keysPage").classList.toggle("hide",!k);document.getElementById("serverPage").classList.toggle("show",sv);document.getElementById("logsPage").classList.toggle("show",lg);document.getElementById("navKeys").classList.toggle("active",k);document.getElementById("navServer").classList.toggle("active",sv);document.getElementById("navLogs").classList.toggle("active",lg);localStorage.setItem("km_page",p);menu(false)}
+function page(p){let d=p==="dashboard",k=p==="keys",sv=p==="server",lg=p==="logs";document.getElementById("dashboardPage").classList.toggle("show",d);document.getElementById("keysPage").classList.toggle("hide",!k);document.getElementById("serverPage").classList.toggle("show",sv);document.getElementById("logsPage").classList.toggle("show",lg);document.getElementById("navDashboard").classList.toggle("active",d);document.getElementById("navKeys").classList.toggle("active",k);document.getElementById("navServer").classList.toggle("active",sv);document.getElementById("navLogs").classList.toggle("active",lg);localStorage.setItem("km_page",p);menu(false)}
 function toast(icon,msg){let t=document.createElement("div");t.className="toast";t.innerHTML=`<div class="toastIcon">${icon}</div><div><b>Cheto</b><small>${msg}</small></div>`;document.getElementById("toastStack").appendChild(t);setTimeout(()=>t.remove(),4300)}
 {% if notice %}setTimeout(()=>toast({{notice_icon|tojson}},{{notice|tojson}}),250);{% endif %}
 function setLang(l){localStorage.setItem("km_lang",l);document.documentElement.lang=l;document.documentElement.dir=l==="ar"?"rtl":"ltr";document.querySelectorAll("[data-"+l+"]").forEach(e=>e.textContent=e.dataset[l]);document.querySelectorAll('input[placeholder="Days"]').forEach(e=>e.placeholder=l==="ar"?"الأيام":"Days");document.querySelectorAll('input[placeholder="Hours"]').forEach(e=>e.placeholder=l==="ar"?"الساعات":"Hours");document.querySelectorAll('input[placeholder="Devices"]').forEach(e=>e.placeholder=l==="ar"?"الأجهزة":"Devices");document.querySelectorAll('input[placeholder="Custom key"]').forEach(e=>e.placeholder=l==="ar"?"مفتاح مخصص":"Custom key")}
@@ -289,6 +320,7 @@ def home():
         if request.method=="POST":
             password=request.form.get("password","")
             if ADMIN_PASSWORD and secrets.compare_digest(password,ADMIN_PASSWORD):
+                session.permanent=True
                 session["admin"]=True
                 session["open_keys_after_login"]=True
                 return redirect("/")
@@ -321,10 +353,11 @@ def home():
         except:z["created_short"]=z["created"]
         z["action"]=z["action"].replace("_"," ").title()
         logs.append(z)
+    stats=_stats(con)
     con.close()
     notice=session.pop("notice",None);notice_icon=session.pop("notice_icon","✓")
     force_keys=session.pop("open_keys_after_login",False)
-    return render_template_string(PANEL_HTML,keys=items,server=server,logs=logs,notice=notice,notice_icon=notice_icon,log_reset_at=log_reset_at,force_keys=force_keys)
+    return render_template_string(PANEL_HTML,keys=items,server=server,stats=stats,logs=logs,notice=notice,notice_icon=notice_icon,log_reset_at=log_reset_at,force_keys=force_keys)
 
 @app.route("/generate",methods=["POST"])
 def generate():
@@ -386,6 +419,7 @@ def delete(key):
 
 @app.route("/verify",methods=["POST"])
 def verify():
+    if not _rate_ok(): return jsonify(valid=False,reason="rate_limited"),429
     data=request.get_json(silent=True) or {}
     key=str(data.get("key","")).strip().upper()
     device_id=str(data.get("device_id","")).strip()
@@ -448,9 +482,25 @@ def server_toggle():
     con.commit();con.close();session["notice"]="Server is now "+("ONLINE" if new_state else "OFFLINE");session["notice_icon"]="●" if new_state else "■"
     return redirect("/#server")
 
+@app.route("/health")
+def health():
+    try:
+        con=db();con.execute("SELECT 1").fetchone();con.close()
+        return jsonify(ok=True,database=True),200
+    except Exception:
+        return jsonify(ok=False,database=False),503
+
 @app.route("/logout")
 def logout():
     session.clear();return redirect("/")
+
+@app.after_request
+def security_headers(resp):
+    resp.headers["X-Content-Type-Options"]="nosniff"
+    resp.headers["X-Frame-Options"]="DENY"
+    resp.headers["Referrer-Policy"]="no-referrer"
+    resp.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=()"
+    return resp
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))

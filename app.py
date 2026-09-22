@@ -527,6 +527,35 @@ async function copyVisibleKeys(){let a=[...document.querySelectorAll(".keyRow")]
 document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();page("keys");document.getElementById("keySearch").focus()}});
 filterKeys();
 
+// Instant key actions: submit in background, then refresh panel automatically.
+document.querySelectorAll('form[action="/generate"],form[action="/add"],form.action.stop,form.action.start,form.action.delete').forEach(form=>{
+ form.addEventListener('submit',async e=>{
+   e.preventDefault();
+   if(form.dataset.busy==='1') return;
+   form.dataset.busy='1';
+   const btn=form.querySelector('button');
+   const old=btn?btn.innerHTML:'';
+   if(btn){btn.disabled=true;btn.style.opacity='.65';}
+   try{
+     const res=await fetch(form.action,{method:'POST',body:new FormData(form),credentials:'same-origin'});
+     if(!res.ok) throw new Error('request failed');
+     const html=await res.text();
+     const doc=new DOMParser().parseFromString(html,'text/html');
+     const fresh=doc.getElementById('keysPage');
+     const current=document.getElementById('keysPage');
+     if(fresh&&current){current.innerHTML=fresh.innerHTML;}
+     // Keep the user on Keys and update counts/cards without a manual pull-to-refresh.
+     page('keys');
+     filterKeys();
+     const msg=form.matches('.delete')?'Key deleted instantly':form.matches('.stop')?'Key stopped instantly':form.matches('.start')?'Key started instantly':form.action.endsWith('/add')?'Custom key added instantly':'New key generated instantly';
+     toast('✓',msg);
+   }catch(err){
+     toast('!','Could not update key');
+     if(btn){btn.disabled=false;btn.style.opacity='';btn.innerHTML=old;}
+   }finally{form.dataset.busy='0';}
+ });
+});
+
 function tickClock(){let e=document.getElementById("liveClock");if(e)e.textContent=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});}tickClock();setInterval(tickClock,1000);
 function focusSmartSearch(){let i=document.getElementById("keySearch");if(i){i.focus();i.scrollIntoView({behavior:"smooth",block:"center"})}}
 function copyTextValue(v){navigator.clipboard&&navigator.clipboard.writeText(v)}

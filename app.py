@@ -280,7 +280,7 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 .ceoPerson{position:absolute;bottom:0;height:92%;pointer-events:auto;cursor:pointer;filter:drop-shadow(0 0 0 transparent);transition:.25s}
 .ceoPerson svg{width:100%;height:100%;overflow:visible}.ceoPerson path{fill:transparent;stroke:#ff334f;stroke-width:1.5;stroke-dasharray:7 7;opacity:.42;vector-effect:non-scaling-stroke;transition:.25s}
 .ceoPerson:hover path{stroke:#ff1538;stroke-width:3;stroke-dasharray:0;opacity:1;filter:drop-shadow(0 0 7px #ff1d42) drop-shadow(0 0 16px #ff1d4266)}
-.ceoPerson:hover{z-index:8}.ceoTag{position:absolute;left:50%;top:8%;transform:translate(-50%,-8px);white-space:nowrap;padding:5px 8px;border:1px solid #ff4158;background:#08070bcc;border-radius:999px;color:#ff7182;font:900 8px monospace;letter-spacing:1px;opacity:0;transition:.22s;box-shadow:0 0 18px #ff28452f}.ceoPerson:hover .ceoTag{opacity:1;transform:translate(-50%,0)}
+.ceoPerson:hover{z-index:8}.ceoTag{position:absolute;left:50%;top:48%;transform:translate(-50%,-8px);white-space:nowrap;padding:5px 8px;border:1px solid #ff4158;background:#08070bcc;border-radius:999px;color:#ff7182;font:900 8px monospace;letter-spacing:1px;opacity:0;transition:.22s;box-shadow:0 0 18px #ff28452f}.ceoPerson:hover .ceoTag{opacity:1;transform:translate(-50%,0)}
 .ceoPerson:nth-child(2) path{stroke:#ff5d42}.ceoPerson:nth-child(3) path{stroke:#ff3b78}.ceoPerson:nth-child(4) path{stroke:#ff253c}.ceoPerson:nth-child(5) path{stroke:#ff704d}.ceoPerson:nth-child(6) path{stroke:#ff315f}
 .ceoLegend{position:absolute;z-index:5;left:14px;bottom:14px;padding:8px 10px;border-radius:10px;background:#050810d9;border:1px solid #4a2029;color:#ff7787;font:900 8px monospace;letter-spacing:1px;box-shadow:0 0 20px #ff29451d}
 
@@ -354,19 +354,19 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 .ceoPerson:hover .runner{stroke-width:2.2!important}
 
 /* CEO tap focus mode */
-.hero-border.ceoFocus .ceoPerson{opacity:0!important;pointer-events:none!important}
+.hero-border.ceoFocus .ceoPerson{opacity:.30!important;pointer-events:auto!important;filter:blur(1.7px) grayscale(.25)!important}
 .hero-border.ceoFocus .ceoPerson.ceoSelected{
  opacity:1!important;pointer-events:auto!important;z-index:12!important;
  filter:none!important
 }
 .hero-border.ceoFocus .ceoPerson.ceoSelected .ceoTag{
- opacity:1!important;transform:translate(-50%,0)!important;
+ top:48%!important;opacity:1!important;transform:translate(-50%,0)!important;
  color:#fff!important;background:#21070ddd!important;
  box-shadow:0 0 20px #ff183866!important
 }
 .ceoFocusShade{position:absolute;z-index:2;inset:0;pointer-events:none;display:none}
 .hero-border.ceoFocus .ceoFocusShade{display:block}
-.ceoFocusShade span{position:absolute;top:0;bottom:0;background:#03050bf2;backdrop-filter:blur(7px);transition:.32s ease}
+.ceoFocusShade span{position:absolute;top:0;bottom:0;background:#03050b55;backdrop-filter:blur(3.2px);transition:.32s ease}
 .ceoFocusShade .focusLeft{left:0}
 .ceoFocusShade .focusRight{right:0}
 .hero-border.ceoFocus .hero img{filter:saturate(.82) contrast(1.05)}

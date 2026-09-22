@@ -684,6 +684,27 @@ def delete(key):
     con=db();con.execute("DELETE FROM key_devices WHERE key=?",(key,));con.execute("DELETE FROM keys WHERE key=?",(key,));add_log(con,"KEY_DELETED",f"Deleted key {key}");con.commit();con.close()
     session["notice"]="Key deleted";session["notice_icon"]="×";return redirect("/")
 
+@app.route("/keylist.json",methods=["GET"])
+def keylist_json():
+    """Public read-only snapshot for Lua clients that cannot make HTTPS requests themselves."""
+    con=db()
+    rows=con.execute("SELECT * FROM keys").fetchall()
+    out={}
+    for r in rows:
+        devices=con.execute("SELECT device_id FROM key_devices WHERE key=? ORDER BY first_seen",(r["key"],)).fetchall()
+        out[str(r["key"]).upper()]={
+            "expiry":r["expiry"],
+            "active":bool(r["active"]),
+            "stopped":bool(r["stopped"]),
+            "max_devices":int(r["max_devices"] or 1),
+            "devices":[str(x["device_id"]) for x in devices],
+        }
+    con.close()
+    resp=jsonify(out)
+    resp.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+
 @app.route("/verify",methods=["POST"])
 def verify():
     if not _rate_ok(): return jsonify(valid=False,reason="rate_limited"),429

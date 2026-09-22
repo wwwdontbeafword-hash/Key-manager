@@ -171,7 +171,8 @@ LOGIN_HTML=r"""
 <script>
 function setLang(l){localStorage.setItem("km_lang",l);document.documentElement.lang=l;document.documentElement.dir=l==="ar"?"rtl":"ltr";document.querySelectorAll("[data-"+l+"]").forEach(e=>e.textContent=e.dataset[l]);document.getElementById("loginPass").placeholder=l==="ar"?"كلمة مرور المدير":"Admin password"}
 function togglePass(){let p=document.getElementById("loginPass");p.type=p.type==="password"?"text":"password"}
-document.getElementById("loginForm").addEventListener("submit",()=>{let b=document.getElementById("loginBtn");b.textContent=document.documentElement.lang==="ar"?"جاري التحقق...":"AUTHENTICATING...";b.style.pointerEvents="none";b.style.opacity=".78"});setLang(localStorage.getItem("km_lang")||"en");
+const savedPass=localStorage.getItem("km_admin_password");if(savedPass)document.getElementById("loginPass").value=savedPass;
+document.getElementById("loginForm").addEventListener("submit",()=>{let p=document.getElementById("loginPass");localStorage.setItem("km_admin_password",p.value);let b=document.getElementById("loginBtn");b.textContent=document.documentElement.lang==="ar"?"جاري التحقق...":"AUTHENTICATING...";b.style.pointerEvents="none";b.style.opacity=".78"});setLang(localStorage.getItem("km_lang")||"en");
 </script></body></html>
 """
 

@@ -4,7 +4,11 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-key")
-DB = "keys.db"
+# IMPORTANT: point this at a persistent disk on hosts such as Render.
+# Example Render env: DATA_DIR=/var/data
+DATA_DIR = os.environ.get("DATA_DIR", os.environ.get("RENDER_DISK_PATH", "."))
+os.makedirs(DATA_DIR, exist_ok=True)
+DB = os.path.join(DATA_DIR, "keys.db")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 LOGIN_IMAGE = "-5877288279722364578_121.jpg"

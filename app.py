@@ -334,6 +334,24 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 }
 .ceoPerson:hover .runner{stroke-width:2.8!important}
 .ceoPerson svg{transform:none!important;transform-origin:center bottom}
+
+/* FINAL body scanner: one short red light only */
+.loginBodyTrace .traceBase{stroke:transparent!important;opacity:0!important}
+.loginBodyTrace .traceRunner{
+ stroke:#ff1838!important;stroke-width:2.25!important;stroke-linecap:round!important;
+ stroke-dasharray:2.8 97.2!important;opacity:1!important;
+ filter:drop-shadow(0 0 2px #ff1838) drop-shadow(0 0 5px #ff1838)!important;
+ animation:loginBodyRun 3s linear infinite!important
+}
+.ceoPerson path:not(.runner){stroke:transparent!important;opacity:0!important;filter:none!important}
+.ceoPerson .runner{
+ stroke:#ff1838!important;stroke-width:2.2!important;stroke-linecap:round!important;
+ stroke-dasharray:2.8 97.2!important;opacity:1!important;
+ filter:drop-shadow(0 0 2px #ff1838) drop-shadow(0 0 5px #ff1838)!important;
+ animation:bodyRunner 3s linear infinite!important
+}
+.ceoPerson:nth-child(n) .runner{animation-delay:0s!important}
+.ceoPerson:hover .runner{stroke-width:2.2!important}
 </style></head><body>
 <div class="drawerShade" id="shade" onclick="menu(false)"></div><aside class="drawer" id="drawer"><div class="profile"><div class="avatar2">C</div><h3>Cheto_Admin</h3></div><nav class="nav">
 <a href="#" id="navDashboard" onclick="page('dashboard');return false"><span>◇</span><b data-en="Dashboard" data-ar="لوحة المعلومات">Dashboard</b></a>

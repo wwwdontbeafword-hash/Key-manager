@@ -270,6 +270,47 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 .ceoPerson:hover{z-index:8}.ceoTag{position:absolute;left:50%;top:8%;transform:translate(-50%,-8px);white-space:nowrap;padding:5px 8px;border:1px solid #ff4158;background:#08070bcc;border-radius:999px;color:#ff7182;font:900 8px monospace;letter-spacing:1px;opacity:0;transition:.22s;box-shadow:0 0 18px #ff28452f}.ceoPerson:hover .ceoTag{opacity:1;transform:translate(-50%,0)}
 .ceoPerson:nth-child(2) path{stroke:#ff5d42}.ceoPerson:nth-child(3) path{stroke:#ff3b78}.ceoPerson:nth-child(4) path{stroke:#ff253c}.ceoPerson:nth-child(5) path{stroke:#ff704d}.ceoPerson:nth-child(6) path{stroke:#ff315f}
 .ceoLegend{position:absolute;z-index:5;left:14px;bottom:14px;padding:8px 10px;border-radius:10px;background:#050810d9;border:1px solid #4a2029;color:#ff7787;font:900 8px monospace;letter-spacing:1px;box-shadow:0 0 20px #ff29451d}
+
+/* Midnight copy control */
+.copyBtn,.copy-key,.copyKey,[onclick*="copyKey"]{
+  position:relative!important;overflow:hidden!important;
+  min-width:38px!important;height:34px!important;padding:0 10px!important;
+  border:1px solid #56347d!important;border-radius:10px!important;
+  background:linear-gradient(145deg,#101321,#080b13)!important;
+  color:#bca8ff!important;box-shadow:inset 0 1px 0 #ffffff0d,0 0 0 1px #6c42b51c,0 7px 20px #0008!important;
+  transition:.2s ease!important
+}
+.copyBtn:hover,.copy-key:hover,.copyKey:hover,[onclick*="copyKey"]:hover{
+  border-color:#9a59ff!important;color:#fff!important;
+  box-shadow:0 0 14px #8a3dff55,inset 0 0 15px #7c3cff18!important;
+  transform:translateY(-1px)
+}
+.copyBtn:active,.copy-key:active,.copyKey:active,[onclick*="copyKey"]:active{transform:scale(.93)}
+.copyBtn:after,.copy-key:after,.copyKey:after,[onclick*="copyKey"]:after{
+  content:"";position:absolute;inset:-80% -35%;
+  background:linear-gradient(105deg,transparent 42%,#b991ff66 50%,transparent 58%);
+  transform:translateX(-80%);animation:copySweep 4s ease-in-out infinite
+}
+@keyframes copySweep{0%,72%{transform:translateX(-85%)}88%,100%{transform:translateX(85%)}}
+
+/* Moving light follows each executive contour */
+.ceoPerson path{
+  stroke:#641b2a!important;stroke-width:1.25!important;stroke-dasharray:none!important;
+  opacity:.55!important;filter:drop-shadow(0 0 2px #ff1738)!important
+}
+.ceoPerson .runner{
+  fill:none!important;stroke:#ff1738!important;stroke-width:3.2!important;
+  stroke-linecap:round!important;stroke-dasharray:12 88!important;
+  opacity:1!important;filter:drop-shadow(0 0 3px #ff1738) drop-shadow(0 0 8px #ff1738) drop-shadow(0 0 15px #ff173888)!important;
+  animation:bodyRunner 2.25s linear infinite!important
+}
+.ceoPerson:nth-child(2) .runner{animation-delay:-.35s!important}
+.ceoPerson:nth-child(3) .runner{animation-delay:-.7s!important}
+.ceoPerson:nth-child(4) .runner{animation-delay:-1.05s!important}
+.ceoPerson:nth-child(5) .runner{animation-delay:-1.4s!important}
+.ceoPerson:nth-child(6) .runner{animation-delay:-1.75s!important}
+@keyframes bodyRunner{to{stroke-dashoffset:-100}}
+.ceoPerson:hover .runner{stroke:#ff5b70!important;stroke-width:4!important;filter:drop-shadow(0 0 5px #ff2948) drop-shadow(0 0 12px #ff2948) drop-shadow(0 0 24px #ff2948)!important}
 </style></head><body>
 <div class="drawerShade" id="shade" onclick="menu(false)"></div><aside class="drawer" id="drawer"><div class="profile"><div class="avatar2">C</div><h3>Cheto_Admin</h3></div><nav class="nav">
 <a href="#" id="navDashboard" onclick="page('dashboard');return false"><span>◇</span><b data-en="Dashboard" data-ar="لوحة المعلومات">Dashboard</b></a>
@@ -299,12 +340,12 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 <div class="statCard"><small>SERVER</small><strong>{{"ONLINE" if server["enabled"] else "OFFLINE"}}</strong><span>Verification status</span></div>
 </div><div class="serverCard dashWelcome"><h2>Control Center</h2><div class="hint">Live overview of keys, devices and verification server.</div><span class="updateBadge {{'live' if server['update_active'] else 'clear'}}"><i class="miniDot"></i>{{"UPDATE LIVE" if server["update_active"] else "SYSTEM NORMAL"}}</span></div></section><section class="keysPage show" id="keysPage"><div class="pageHero"><h2>Access Intelligence</h2><p>Generate, search, filter and control every issued credential from one place.</p><span class="heroLive"><i></i>KEY INDEX READY</span></div><div class="miniInsight"><div class="insight"><b>{{stats["active"]}}</b><small>ACTIVE NOW</small></div><div class="insight"><b>{{stats["expired"]}}</b><small>EXPIRED</small></div><div class="insight"><b>{{stats["devices"]}}</b><small>BOUND DEVICES</small></div></div>
 <div class="hero-border"><div class="hero"><img src="/meer.jpg" alt="meer"><div class="ceoOverlay" aria-label="Executive team">
-<div class="ceoPerson" style="left:2%;width:18%"><span class="ceoTag">CEO // 01</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M43 15 C25 24 25 55 30 72 L20 92 13 150 8 295 87 295 80 180 72 110 64 78 C72 50 64 22 43 15Z"/></svg></div>
-<div class="ceoPerson" style="left:17%;width:19%"><span class="ceoTag">CEO // 02</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M48 14 C29 18 25 48 31 70 L18 95 13 155 8 295 91 295 83 170 76 104 65 73 C70 42 64 18 48 14Z"/></svg></div>
-<div class="ceoPerson" style="left:33%;width:17%"><span class="ceoTag">CEO // 03</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M50 16 C33 20 31 49 36 68 L24 93 18 155 12 295 89 295 82 162 75 98 65 69 C70 43 65 20 50 16Z"/></svg></div>
-<div class="ceoPerson" style="left:48%;width:17%"><span class="ceoTag">CEO // 04</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M50 18 C34 22 32 48 37 68 L25 94 17 156 12 295 89 295 82 162 75 99 64 70 C70 44 65 22 50 18Z"/></svg></div>
-<div class="ceoPerson" style="left:63%;width:18%"><span class="ceoTag">CEO // 05</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M49 17 C31 22 29 49 35 70 L21 95 14 157 8 295 90 295 84 170 76 103 64 72 C70 45 65 21 49 17Z"/></svg></div>
-<div class="ceoPerson" style="left:79%;width:19%"><span class="ceoTag">CEO // 06</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M49 15 C30 20 27 49 34 71 L20 96 13 157 7 295 91 295 84 170 76 103 64 72 C70 43 65 19 49 15Z"/></svg></div>
+<div class="ceoPerson" style="left:2%;width:18%"><span class="ceoTag">CEO // 01</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M43 15 C25 24 25 55 30 72 L20 92 13 150 8 295 87 295 80 180 72 110 64 78 C72 50 64 22 43 15Z"/><path class="runner" d="M43 15 C25 24 25 55 30 72 L20 92 13 150 8 295 87 295 80 180 72 110 64 78 C72 50 64 22 43 15Z"/></svg></div>
+<div class="ceoPerson" style="left:17%;width:19%"><span class="ceoTag">CEO // 02</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M48 14 C29 18 25 48 31 70 L18 95 13 155 8 295 91 295 83 170 76 104 65 73 C70 42 64 18 48 14Z"/><path class="runner" d="M48 14 C29 18 25 48 31 70 L18 95 13 155 8 295 91 295 83 170 76 104 65 73 C70 42 64 18 48 14Z"/></svg></div>
+<div class="ceoPerson" style="left:33%;width:17%"><span class="ceoTag">CEO // 03</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M50 16 C33 20 31 49 36 68 L24 93 18 155 12 295 89 295 82 162 75 98 65 69 C70 43 65 20 50 16Z"/><path class="runner" d="M50 16 C33 20 31 49 36 68 L24 93 18 155 12 295 89 295 82 162 75 98 65 69 C70 43 65 20 50 16Z"/></svg></div>
+<div class="ceoPerson" style="left:48%;width:17%"><span class="ceoTag">CEO // 04</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M50 18 C34 22 32 48 37 68 L25 94 17 156 12 295 89 295 82 162 75 99 64 70 C70 44 65 22 50 18Z"/><path class="runner" d="M50 18 C34 22 32 48 37 68 L25 94 17 156 12 295 89 295 82 162 75 99 64 70 C70 44 65 22 50 18Z"/></svg></div>
+<div class="ceoPerson" style="left:63%;width:18%"><span class="ceoTag">CEO // 05</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M49 17 C31 22 29 49 35 70 L21 95 14 157 8 295 90 295 84 170 76 103 64 72 C70 45 65 21 49 17Z"/><path class="runner" d="M49 17 C31 22 29 49 35 70 L21 95 14 157 8 295 90 295 84 170 76 103 64 72 C70 45 65 21 49 17Z"/></svg></div>
+<div class="ceoPerson" style="left:79%;width:19%"><span class="ceoTag">CEO // 06</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M49 15 C30 20 27 49 34 71 L20 96 13 157 7 295 91 295 84 170 76 103 64 72 C70 43 65 19 49 15Z"/><path class="runner" d="M49 15 C30 20 27 49 34 71 L20 96 13 157 7 295 91 295 84 170 76 103 64 72 C70 43 65 19 49 15Z"/></svg></div>
 </div><div class="ceoLegend">EXECUTIVE TEAM // HOVER A MEMBER</div></div><div class="heroTools"><button onclick="this.closest('.hero-border').querySelector('img').requestFullscreen?.()">⛶ FULL VIEW</button><button onclick="location.href='/meer.jpg'">↗ OPEN IMAGE</button></div></div><div class="featureDeck">
 <div class="fx"><span class="ico">⌕</span><b>Instant Finder</b><button onclick="focusSmartSearch()">SEARCH NOW</button><span>Find partial key text instantly.</span></div>
 <div class="fx"><span class="ico">⧉</span><b>Bulk Copy</b><button onclick="copyVisibleKeys()">COPY VISIBLE</button><span>Copy filtered results.</span></div>

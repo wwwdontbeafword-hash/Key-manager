@@ -352,6 +352,26 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 }
 .ceoPerson:nth-child(n) .runner{animation-delay:0s!important}
 .ceoPerson:hover .runner{stroke-width:2.2!important}
+
+/* CEO tap focus mode */
+.hero-border.ceoFocus .ceoPerson{opacity:0!important;pointer-events:none!important}
+.hero-border.ceoFocus .ceoPerson.ceoSelected{
+ opacity:1!important;pointer-events:auto!important;z-index:12!important;
+ filter:none!important
+}
+.hero-border.ceoFocus .ceoPerson.ceoSelected .ceoTag{
+ opacity:1!important;transform:translate(-50%,0)!important;
+ color:#fff!important;background:#21070ddd!important;
+ box-shadow:0 0 20px #ff183866!important
+}
+.ceoFocusShade{position:absolute;z-index:2;inset:0;pointer-events:none;display:none}
+.hero-border.ceoFocus .ceoFocusShade{display:block}
+.ceoFocusShade span{position:absolute;top:0;bottom:0;background:#03050bf2;backdrop-filter:blur(7px);transition:.32s ease}
+.ceoFocusShade .focusLeft{left:0}
+.ceoFocusShade .focusRight{right:0}
+.hero-border.ceoFocus .hero img{filter:saturate(.82) contrast(1.05)}
+.ceoLegend{cursor:pointer;pointer-events:auto}
+.hero-border.ceoFocus .ceoLegend{z-index:15;color:#fff;border-color:#ff4059}
 </style></head><body>
 <div class="drawerShade" id="shade" onclick="menu(false)"></div><aside class="drawer" id="drawer"><div class="profile"><div class="avatar2">C</div><h3>Cheto_Admin</h3></div><nav class="nav">
 <a href="#" id="navDashboard" onclick="page('dashboard');return false"><span>◇</span><b data-en="Dashboard" data-ar="لوحة المعلومات">Dashboard</b></a>
@@ -380,7 +400,7 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 <div class="statCard"><small>DEVICES</small><strong>{{stats["devices"]}}</strong><span>Registered devices</span></div>
 <div class="statCard"><small>SERVER</small><strong>{{"ONLINE" if server["enabled"] else "OFFLINE"}}</strong><span>Verification status</span></div>
 </div><div class="serverCard dashWelcome"><h2>Control Center</h2><div class="hint">Live overview of keys, devices and verification server.</div><span class="updateBadge {{'live' if server['update_active'] else 'clear'}}"><i class="miniDot"></i>{{"UPDATE LIVE" if server["update_active"] else "SYSTEM NORMAL"}}</span></div></section><section class="keysPage show" id="keysPage"><div class="pageHero"><h2>Access Intelligence</h2><p>Generate, search, filter and control every issued credential from one place.</p><span class="heroLive"><i></i>KEY INDEX READY</span></div><div class="miniInsight"><div class="insight"><b>{{stats["active"]}}</b><small>ACTIVE NOW</small></div><div class="insight"><b>{{stats["expired"]}}</b><small>EXPIRED</small></div><div class="insight"><b>{{stats["devices"]}}</b><small>BOUND DEVICES</small></div></div>
-<div class="hero-border"><div class="hero"><img src="/meer.jpg" alt="meer"><div class="ceoOverlay" aria-label="Executive team"><div class="ceoPerson" style="left:4.4%;width:15.0%;bottom:0;height:88.5%"><span class="ceoTag">CEO // 01</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M50 8 C34 9 28 27 31 45 C32 54 37 61 39 67 C27 73 21 88 18 108 L11 295 L89 295 L82 108 C79 88 73 73 61 67 C63 61 68 54 69 45 C72 27 66 9 50 8Z"/><path class="runner" d="M50 8 C34 9 28 27 31 45 C32 54 37 61 39 67 C27 73 21 88 18 108 L11 295 L89 295 L82 108 C79 88 73 73 61 67 C63 61 68 54 69 45 C72 27 66 9 50 8Z"/></svg></div>
+<div class="hero-border"><div class="hero"><img src="/meer.jpg" alt="meer"><div class="ceoFocusShade"><span class="focusLeft"></span><span class="focusRight"></span></div><div class="ceoOverlay" aria-label="Executive team"><div class="ceoPerson" style="left:4.4%;width:15.0%;bottom:0;height:88.5%"><span class="ceoTag">CEO // 01</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M50 8 C34 9 28 27 31 45 C32 54 37 61 39 67 C27 73 21 88 18 108 L11 295 L89 295 L82 108 C79 88 73 73 61 67 C63 61 68 54 69 45 C72 27 66 9 50 8Z"/><path class="runner" d="M50 8 C34 9 28 27 31 45 C32 54 37 61 39 67 C27 73 21 88 18 108 L11 295 L89 295 L82 108 C79 88 73 73 61 67 C63 61 68 54 69 45 C72 27 66 9 50 8Z"/></svg></div>
 <div class="ceoPerson" style="left:20.0%;width:15.0%;bottom:0;height:90%"><span class="ceoTag">CEO // 02</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M50 9 C34 10 29 28 31 45 C32 55 37 62 39 68 C27 74 21 89 18 109 L11 295 L89 295 L82 109 C79 89 73 74 61 68 C63 62 68 55 69 45 C71 28 66 10 50 9Z"/><path class="runner" d="M50 9 C34 10 29 28 31 45 C32 55 37 62 39 68 C27 74 21 89 18 109 L11 295 L89 295 L82 109 C79 89 73 74 61 68 C63 62 68 55 69 45 C71 28 66 10 50 9Z"/></svg></div>
 <div class="ceoPerson" style="left:36.1%;width:13.0%;bottom:0;height:89.5%"><span class="ceoTag">CEO // 03</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M50 9 C35 10 30 28 32 45 C33 55 38 62 40 68 C29 75 23 90 20 110 L14 295 L86 295 L80 110 C77 90 71 75 60 68 C62 62 67 55 68 45 C70 28 65 10 50 9Z"/><path class="runner" d="M50 9 C35 10 30 28 32 45 C33 55 38 62 40 68 C29 75 23 90 20 110 L14 295 L86 295 L80 110 C77 90 71 75 60 68 C62 62 67 55 68 45 C70 28 65 10 50 9Z"/></svg></div>
 <div class="ceoPerson" style="left:51.0%;width:13.0%;bottom:0;height:87.5%"><span class="ceoTag">CEO // 04</span><svg viewBox="0 0 100 300" preserveAspectRatio="none"><path d="M50 9 C35 10 30 28 32 45 C33 55 38 62 40 68 C29 75 23 90 20 110 L14 295 L86 295 L80 110 C77 90 71 75 60 68 C62 62 67 55 68 45 C70 28 65 10 50 9Z"/><path class="runner" d="M50 9 C35 10 30 28 32 45 C33 55 38 62 40 68 C29 75 23 90 20 110 L14 295 L86 295 L80 110 C77 90 71 75 60 68 C62 62 67 55 68 45 C70 28 65 10 50 9Z"/></svg></div>
@@ -446,6 +466,28 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 <div class="toastStack" id="toastStack"></div>
 </div>
 <script>
+
+function selectCeo(el){
+ const hero=el.closest(".hero-border");
+ const people=[...hero.querySelectorAll(".ceoPerson")];
+ const same=el.classList.contains("ceoSelected") && hero.classList.contains("ceoFocus");
+ people.forEach(p=>p.classList.remove("ceoSelected"));
+ if(same){
+   hero.classList.remove("ceoFocus");
+   hero.querySelector(".ceoLegend").textContent="EXECUTIVE TEAM // TAP A MEMBER";
+   return;
+ }
+ el.classList.add("ceoSelected");
+ hero.classList.add("ceoFocus");
+ const left=parseFloat(el.style.left)||0, width=parseFloat(el.style.width)||15;
+ const shade=hero.querySelector(".ceoFocusShade");
+ shade.querySelector(".focusLeft").style.width=Math.max(0,left)+"%";
+ shade.querySelector(".focusRight").style.width=Math.max(0,100-left-width)+"%";
+ hero.querySelector(".ceoLegend").textContent=el.querySelector(".ceoTag").textContent+" // SELECTED";
+}
+document.querySelectorAll(".ceoPerson").forEach(el=>{
+ el.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();selectCeo(el)});
+});
 function menu(x){document.getElementById("drawer").classList.toggle("show",x);document.getElementById("shade").classList.toggle("show",x)}
 function page(p){let d=p==="dashboard",k=p==="keys",sv=p==="server",lg=p==="logs";document.getElementById("dashboardPage").classList.toggle("show",d);document.getElementById("keysPage").classList.toggle("hide",!k);document.getElementById("serverPage").classList.toggle("show",sv);document.getElementById("logsPage").classList.toggle("show",lg);document.getElementById("navDashboard").classList.toggle("active",d);document.getElementById("navKeys").classList.toggle("active",k);document.getElementById("navServer").classList.toggle("active",sv);document.getElementById("navLogs").classList.toggle("active",lg);localStorage.setItem("km_page",p);menu(false)}
 function toast(icon,msg){let t=document.createElement("div");t.className="toast";t.innerHTML=`<div class="toastIcon">${icon}</div><div><b>Cheto</b><small>${msg}</small></div>`;document.getElementById("toastStack").appendChild(t);setTimeout(()=>t.remove(),4300)}

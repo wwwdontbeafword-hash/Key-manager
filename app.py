@@ -56,17 +56,8 @@ def db():
     for name,sql in {
         "max_devices":"ALTER TABLE keys ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1",
         "paused_seconds":"ALTER TABLE keys ADD COLUMN paused_seconds INTEGER",
-        "stopped":"ALTER TABLE keys ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0",
-        "duration_seconds":"ALTER TABLE keys ADD COLUMN duration_seconds INTEGER",
-        "activated_at":"ALTER TABLE keys ADD COLUMN activated_at TEXT"}.items():
+        "stopped":"ALTER TABLE keys ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0"}.items():
         if name not in cols: con.execute(sql)
-
-    # Backfill original duration for keys created before activation-on-first-use existed.
-    # Existing keys keep their current remaining time as their reset duration.
-    for r in con.execute("SELECT * FROM keys WHERE duration_seconds IS NULL").fetchall():
-        try: remaining=max(1,int((datetime.fromisoformat(r["expiry"])-datetime.utcnow()).total_seconds()))
-        except Exception: remaining=3600
-        con.execute("UPDATE keys SET duration_seconds=?, activated_at=? WHERE key=?",(remaining,r["created"],r["key"]))
 
     con.execute("""CREATE TABLE IF NOT EXISTS server_state(
         id INTEGER PRIMARY KEY, title TEXT NOT NULL, message TEXT NOT NULL,
@@ -120,9 +111,6 @@ def add_log(con, action, detail):
 def seconds_left(row):
     if row["stopped"] and row["paused_seconds"] is not None:
         return max(0, int(row["paused_seconds"]))
-    # A newly issued/reset key keeps its full duration until first successful verification.
-    if "activated_at" in row.keys() and row["activated_at"] is None:
-        return max(0, int(row["duration_seconds"] or 0))
     try:
         return max(0, int((datetime.fromisoformat(row["expiry"]) - datetime.utcnow()).total_seconds()))
     except Exception:
@@ -254,7 +242,7 @@ body:after{content:"";position:fixed;inset:0;pointer-events:none;background:line
 .hero-border,.motion-border{position:relative;margin-top:18px;padding:2px;border-radius:17px;overflow:hidden;background:#101624}.hero-border:before,.motion-border:before{content:"";position:absolute;width:42%;height:240%;left:-20%;top:-70%;background:linear-gradient(90deg,transparent,#5b7cff,#9b5cff,transparent);animation:orbit 3.5s linear infinite;transform-origin:170% 50%}@keyframes orbit{to{transform:rotate(360deg)}}.hero,.card{position:relative;z-index:1;background:#070b13;border-radius:15px}.hero{overflow:hidden}.hero img{display:block;width:100%;height:auto;max-height:430px;object-fit:contain;transition:transform 7s ease}.hero:hover img{transform:scale(1.025)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}.motion-border{margin-top:0}.card{height:100%;padding:22px;transition:.3s}.card:hover{background:#090e18}.card h3{margin:0 0 6px;font-size:19px}.hint{color:var(--muted);font-size:12px;margin-bottom:16px}.fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}.custom{grid-template-columns:1.4fr .65fr .65fr .7fr}
 input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;font-size:13px}input,textarea{width:100%;background:#050810;color:#fff;outline:none;transition:.25s}input:focus,textarea:focus{border-color:#6757ff;box-shadow:0 0 0 3px #6757ff1c;transform:translateY(-1px)}.primary{width:100%;margin-top:12px;border:0;color:#fff;font-weight:900;background:linear-gradient(90deg,#653cff,#ad37f5);background-size:180%;box-shadow:0 8px 28px #6b3cff30;cursor:pointer;transition:.25s;animation:buttonGlow 3s linear infinite}@keyframes buttonGlow{50%{background-position:100%;box-shadow:0 8px 35px #9e3cff45}}.primary:hover{filter:brightness(1.15);transform:translateY(-2px)}
-.keys{margin-top:20px;background:#060a12;border:1px solid var(--line);border-radius:16px;overflow:hidden}.keyTools{padding:16px 18px;border-bottom:1px solid #182131;background:linear-gradient(180deg,#090e18,#060a12)}.searchRow{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:center}.searchBox{position:relative}.searchBox input{height:48px;padding-left:43px;padding-right:42px;border-radius:14px;background:#040812;border-color:#28334a;font-family:monospace}.searchBox:before{content:"⌕";position:absolute;left:15px;top:10px;font-size:23px;color:#7e89a4;z-index:2}.clearSearch{position:absolute;right:8px;top:7px;width:34px;height:34px;padding:0;border:0;background:#111827;color:#8d98ad;cursor:pointer}.toolBtn{height:48px;white-space:nowrap;background:#0b1120;color:#cbd4e8;border-color:#29344a;font-weight:900;cursor:pointer}.searchMeta{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:10px;color:#77839a;font-size:11px}.searchMeta b{color:#bfc9dd}.quickFilters{display:flex;gap:6px;flex-wrap:wrap}.filterChip{padding:6px 9px;border-radius:999px;background:#0a101b;color:#8490a7;border:1px solid #222d40;font-size:10px;font-weight:900;cursor:pointer}.filterChip.active{color:#fff;border-color:#6e59ff;background:#261d58}.keys-head{padding:21px;border-bottom:1px solid var(--line)}.keys-head h3{margin:0}table{width:100%;border-collapse:collapse}th{padding:15px 18px;text-align:left;font-size:10px;letter-spacing:2px;color:#737c94}td{padding:16px 18px;border-top:1px solid #111827}.keycell{display:flex;align-items:center;gap:12px;font-weight:800}.keyicon{position:relative;width:46px;height:46px;flex:0 0 46px;border-radius:50%;display:grid;place-items:center;overflow:hidden;transition:.25s}.keyicon:before{content:"";position:absolute;inset:1px;border-radius:50%;border:1px solid currentColor;opacity:.55}.keyicon svg{position:relative;z-index:2;width:24px;height:24px;fill:currentColor;filter:drop-shadow(0 0 5px currentColor)}.keyicon.on{color:#45efa0;background:#063a29;border:1px solid #45efa088;box-shadow:0 0 10px #45efa077,0 0 28px #28df8b44,inset 0 0 18px #2ce9941f}.keyicon.off{color:#ff5874;background:#410c18;border:1px solid #ff587488;box-shadow:0 0 10px #ff587477,0 0 28px #ff365744,inset 0 0 18px #ff45611f}.status{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:7px 10px;font-size:10px;font-weight:900}.status.on{color:#42ec92;background:#07271c}.status.off{color:#ff617a;background:#2b0b14}.dot{width:6px;height:6px;border-radius:50%;background:currentColor}.exp{font-family:monospace;color:#cbd2e3;white-space:nowrap}.devices{color:#aab3c7;white-space:nowrap}.action{display:inline-block;margin:2px}.action button{font-weight:800;cursor:pointer;background:#0a0e17}.stop button{color:#ffb642;border-color:#684612;background:#241807}.start button{color:#4ef09a;border-color:#17623e;background:#06251a}.delete button{color:#ff617a;border-color:#6e2032;background:#260a12}.reset button{color:#7de8c0;border-color:#245f4c;background:linear-gradient(145deg,#0a1817,#07100f);font-weight:900;cursor:pointer;transition:.22s}.reset button:hover{color:#baffdf;border-color:#42d69a;box-shadow:0 0 22px #38d3942b;transform:translateY(-1px)}.edit button{min-width:92px;letter-spacing:.55px;position:relative;overflow:hidden;color:#c8bcff;border-color:#4b3a78;background:linear-gradient(145deg,#111525,#080b14);box-shadow:inset 0 1px 0 #ffffff0d,0 8px 22px #0008,0 0 18px #7654ff18;transition:.22s}.edit button:hover{color:#fff;border-color:#8468ff;transform:translateY(-1px);box-shadow:inset 0 0 16px #7954ff18,0 0 24px #7654ff42}.edit button:after{content:"";position:absolute;inset:-80% -45%;background:linear-gradient(105deg,transparent 43%,#b7a7ff55 50%,transparent 57%);transform:translateX(-80%);animation:editSweep 4.2s ease-in-out infinite}@keyframes editSweep{0%,72%{transform:translateX(-85%)}90%,100%{transform:translateX(85%)}}.editModal{position:fixed;inset:0;z-index:120;display:none;place-items:center;padding:18px;background:#02040be8;backdrop-filter:blur(18px)}.editModal.show{display:grid}.editCard{position:relative;overflow:hidden;width:min(520px,94vw);border:1px solid #41365f;border-radius:22px;padding:22px;background:radial-gradient(circle at 88% 0,#7954ff22,transparent 35%),radial-gradient(circle at 0 100%,#263e8a16,transparent 38%),linear-gradient(145deg,#0c101b,#060810);box-shadow:0 30px 90px #000e,0 0 55px #7654ff1f,inset 0 1px 0 #ffffff0a}.editCard:before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,#8e75ff,#b54cff,#8e75ff,transparent);box-shadow:0 0 18px #7954ff88}.editTop .eyebrow{color:#8e7cff}.editTop h3{letter-spacing:-.3px}.editTop{display:flex;justify-content:space-between;align-items:center;margin-bottom:17px}.editTop h3{margin:0;font-size:19px}.editClose{width:38px;height:38px;padding:0;border-radius:11px;background:#0b0e15;color:#b8bfd0;border-color:#252c3b;cursor:pointer}.editFields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.editFields label{display:block;color:#858fa3;font-size:10px;font-weight:900;letter-spacing:.7px}.editFields label:first-child{grid-column:1/-1}.editFields input{margin-top:6px}.editNote{margin:12px 0 0;color:#747f93;font-size:10px;line-height:1.5}
+.keys{margin-top:20px;background:#060a12;border:1px solid var(--line);border-radius:16px;overflow:hidden}.keyTools{padding:16px 18px;border-bottom:1px solid #182131;background:linear-gradient(180deg,#090e18,#060a12)}.searchRow{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:center}.searchBox{position:relative}.searchBox input{height:48px;padding-left:43px;padding-right:42px;border-radius:14px;background:#040812;border-color:#28334a;font-family:monospace}.searchBox:before{content:"⌕";position:absolute;left:15px;top:10px;font-size:23px;color:#7e89a4;z-index:2}.clearSearch{position:absolute;right:8px;top:7px;width:34px;height:34px;padding:0;border:0;background:#111827;color:#8d98ad;cursor:pointer}.toolBtn{height:48px;white-space:nowrap;background:#0b1120;color:#cbd4e8;border-color:#29344a;font-weight:900;cursor:pointer}.searchMeta{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:10px;color:#77839a;font-size:11px}.searchMeta b{color:#bfc9dd}.quickFilters{display:flex;gap:6px;flex-wrap:wrap}.filterChip{padding:6px 9px;border-radius:999px;background:#0a101b;color:#8490a7;border:1px solid #222d40;font-size:10px;font-weight:900;cursor:pointer}.filterChip.active{color:#fff;border-color:#6e59ff;background:#261d58}.keys-head{padding:21px;border-bottom:1px solid var(--line)}.keys-head h3{margin:0}table{width:100%;border-collapse:collapse}th{padding:15px 18px;text-align:left;font-size:10px;letter-spacing:2px;color:#737c94}td{padding:16px 18px;border-top:1px solid #111827}.keycell{display:flex;align-items:center;gap:12px;font-weight:800}.keyicon{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;border:1px solid currentColor;box-shadow:0 0 18px currentColor}.keyicon svg{width:20px;height:20px;fill:currentColor}.keyicon.on{color:#39e88b;background:#06331f}.keyicon.off{color:#ff536f;background:#3a0b16}.status{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:7px 10px;font-size:10px;font-weight:900}.status.on{color:#42ec92;background:#07271c}.status.off{color:#ff617a;background:#2b0b14}.dot{width:6px;height:6px;border-radius:50%;background:currentColor}.exp{font-family:monospace;color:#cbd2e3;white-space:nowrap}.devices{color:#aab3c7;white-space:nowrap}.action{display:inline-block;margin:2px}.action button{font-weight:800;cursor:pointer;background:#0a0e17}.stop button{color:#ffb642;border-color:#684612;background:#241807}.start button{color:#4ef09a;border-color:#17623e;background:#06251a}.delete button{color:#ff617a;border-color:#6e2032;background:#260a12}
 .server{display:none;animation:sectionIn .5s ease}.server.show,.keysPage.show{display:block}.keysPage.hide{display:none}@keyframes sectionIn{from{opacity:0;transform:translateX(18px)}}.serverGrid{display:grid;gap:20px;margin-top:22px}.serverCard{background:#070b13;border:1px solid #1c2535;border-radius:17px;padding:23px;box-shadow:0 15px 50px #0004;animation:cardBreath 4s ease-in-out infinite}@keyframes cardBreath{50%{border-color:#41366f;box-shadow:0 15px 60px #684cff12}}.serverCard h2{margin:0 0 6px}.serverCard textarea{min-height:72px;resize:vertical;margin-top:9px}.beam{height:2px;margin:27px 0;border-radius:10px;background:linear-gradient(90deg,transparent,#5d7cff,#b44cff,#5d7cff,transparent);background-size:200%;animation:beam 2.4s linear infinite;box-shadow:0 0 15px #785bff}@keyframes beam{to{background-position:200%}}.serverStatus{display:flex;align-items:center;justify-content:space-between;gap:20px}.lamp{width:62px;height:62px;border-radius:16px;background:#092c1d;border:1px solid #31e88b;box-shadow:0 0 25px #31e88b55;animation:lamp 1.7s ease-in-out infinite}.lamp.off{background:#360b15;border-color:#ff536f;box-shadow:0 0 25px #ff536f55}@keyframes lamp{50%{filter:brightness(1.45);transform:scale(1.04)}}.toggleServer{min-width:125px;font-weight:900;cursor:pointer}.flash{animation:flash .5s ease}@keyframes flash{50%{filter:brightness(1.8)}}
 @media(max-width:760px){.grid{grid-template-columns:1fr}.hero img{max-height:none}.fields{grid-template-columns:1fr 1fr}.custom{grid-template-columns:1fr 1fr}.custom input:first-child{grid-column:1/-1}.keys{overflow-x:auto}table{min-width:820px}.title{font-size:27px}.drawer{width:75vw;min-width:0}}
 
@@ -432,8 +420,8 @@ input,textarea,button{padding:12px;border-radius:9px;border:1px solid #20293a;fo
 <div class="motion-border"><div class="card"><h3 data-en="Generate Key" data-ar="إنشاء مفتاح">Generate Key</h3><div class="hint" data-en="Random 25-character Cheto key with days, hours and device limit." data-ar="إنشاء مفتاح Cheto عشوائي مع تحديد الأيام والساعات وعدد الأجهزة.">Random 25-character Cheto key with days, hours and device limit.</div><form action="/generate" method="POST"><div class="fields"><input type="number" name="days" value="30" min="0" placeholder="Days"><input type="number" name="hours" value="0" min="0" placeholder="Hours"><input type="number" name="max_devices" value="1" min="1" max="100" placeholder="Devices"></div><button class="primary" data-en="Generate Key" data-ar="إنشاء المفتاح">Generate Key</button></form></div></div>
 <div class="motion-border"><div class="card"><h3 data-en="Add Custom Key" data-ar="إضافة مفتاح مخصص">Add Custom Key</h3><div class="hint" data-en="Custom key with days, hours and up to 100 devices." data-ar="مفتاح مخصص مع الأيام والساعات وحتى 100 جهاز.">Custom key with days, hours and up to 100 devices.</div><form action="/add" method="POST"><div class="custom fields"><input name="key" placeholder="Custom key" required><input type="number" name="days" value="30" min="0" placeholder="Days"><input type="number" name="hours" value="0" min="0" placeholder="Hours"><input type="number" name="max_devices" value="1" min="1" max="100" placeholder="Devices"></div><button class="primary" data-en="Add Key" data-ar="إضافة المفتاح">Add Key</button></form></div></div></div>
 <div class="keys"><div class="keys-head"><h3 data-en="Access Keys" data-ar="مفاتيح الوصول">Access Keys</h3></div><div class="keyTools"><div class="searchRow"><div class="searchBox"><input id="keySearch" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="Search keys instantly..." oninput="filterKeys()"><button class="clearSearch" type="button" onclick="clearKeySearch()">×</button></div><button class="toolBtn" type="button" onclick="focusSmartSearch()">⌕ FOCUS SEARCH</button><button class="toolBtn" type="button" onclick="copyVisibleKeys()">⧉ COPY RESULTS</button></div><div class="searchMeta"><span><b id="matchCount">{{stats["total"]}}</b> matching key(s) • searches anywhere inside the key</span><div class="quickFilters"><button class="filterChip active" onclick="setKeyFilter('ALL',this)">ALL</button><button class="filterChip" onclick="setKeyFilter('ACTIVE',this)">ACTIVE</button><button class="filterChip" onclick="setKeyFilter('STOPPED',this)">STOPPED</button><button class="filterChip" onclick="setKeyFilter('EXPIRED',this)">EXPIRED</button></div></div></div><table><thead><tr><th data-en="NAME / KEY" data-ar="الاسم / المفتاح">NAME / KEY</th><th data-en="TIME LEFT" data-ar="الوقت المتبقي">TIME LEFT</th><th data-en="DEVICES" data-ar="الأجهزة">DEVICES</th><th data-en="STATUS" data-ar="الحالة">STATUS</th><th data-en="ACTION" data-ar="الإجراء">ACTION</th></tr></thead><tbody>
-{% for k in keys %}<tr class="keyRow" data-key="{{k['key']|e}}" data-state="{{k['state']}}"><td><div class="keycell"><span class="keyicon {{'on' if k['state']=='ACTIVE' else 'off'}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.25 3.5a5.75 5.75 0 1 0 4.96 8.66H14v2h2.25v2H18.5v2H22v-5.5h-9.79A5.75 5.75 0 0 0 7.25 3.5Zm0 3.25a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z"/></svg></span><span class="keyText">{{k["key"]}}</span><button class="copyKey" type="button" onclick="copyOneKey(this)">⧉</button></div></td><td class="exp" data-seconds="{{k['seconds']}}" data-running="{{1 if k['state']=='ACTIVE' and k['activated_at'] else 0}}">{{k["remaining"]}}</td><td class="devices">{{k["used_devices"]}} / {{k["max_devices"]}}</td><td><span class="status {{'on' if k['state']=='ACTIVE' else 'off'}}"><i class="dot"></i>{{k["state"]}}</span></td><td>
-{% if k["state"] == "ACTIVE" %}<form class="action stop" action="/stop/{{k['key']}}" method="POST"><button>STOP</button></form>{% elif k["state"] == "STOPPED" %}<form class="action start" action="/start/{{k['key']}}" method="POST"><button>START</button></form>{% endif %}<span class="action edit"><button type="button" onclick="openEdit(this)" data-key="{{k['key']|e}}" data-seconds="{{k['duration_seconds'] or k['seconds']}}" data-max="{{k['max_devices']}}">✎ EDIT</button></span><form class="action reset" action="/reset/{{k['key']}}" method="POST"><button type="submit">RESET</button></form><form class="action delete" action="/delete/{{k['key']}}" method="POST"><button data-en="Delete" data-ar="حذف">Delete</button></form></td></tr>{% endfor %}</tbody></table><div class="noResults" id="noKeyResults" style="display:none">No keys match this search or filter.</div></div><div class="editModal" id="editModal" onclick="if(event.target===this)closeEdit()"><div class="editCard"><div class="editTop"><div><div class="eyebrow">PREMIUM CREDENTIAL EDITOR</div><h3>EDIT KEY</h3></div><button class="editClose" type="button" onclick="closeEdit()">×</button></div><form id="editKeyForm" class="editKeyForm" method="POST"><div class="editFields"><label>KEY NAME<input id="editKeyName" name="new_key" maxlength="80" required></label><label>DAYS<input id="editDays" name="days" type="number" min="0" max="3650" value="0"></label><label>HOURS<input id="editHours" name="hours" type="number" min="0" max="23" value="1"></label><label>MAX DEVICES<input id="editMax" name="max_devices" type="number" min="1" max="100" value="1"></label></div><p class="editNote">Midnight editor • Edit the key name, original duration and device limit. This editor never uses the live countdown as the duration.</p><button class="primary" type="submit">SAVE CHANGES</button></form></div></div>
+{% for k in keys %}<tr class="keyRow" data-key="{{k['key']|e}}" data-state="{{k['state']}}"><td><div class="keycell"><span class="keyicon {{'on' if k['state']=='ACTIVE' else 'off'}}"><svg viewBox="0 0 24 24"><path d="M7.5 14A5.5 5.5 0 1 1 12.7 6.7l8.1 0v3h-2v2h-3v2h-3.1A5.48 5.48 0 0 1 7.5 14Zm0-3A2.5 2.5 0 1 0 7.5 6a2.5 2.5 0 0 0 0 5Z"/></svg></span><span class="keyText">{{k["key"]}}</span><button class="copyKey" type="button" onclick="copyOneKey(this)">⧉</button></div></td><td class="exp" data-seconds="{{k['seconds']}}" data-running="{{1 if k['state']=='ACTIVE' else 0}}">{{k["remaining"]}}</td><td class="devices">{{k["used_devices"]}} / {{k["max_devices"]}}</td><td><span class="status {{'on' if k['state']=='ACTIVE' else 'off'}}"><i class="dot"></i>{{k["state"]}}</span></td><td>
+{% if k["state"] == "ACTIVE" %}<form class="action stop" action="/stop/{{k['key']}}" method="POST"><button>STOP</button></form>{% elif k["state"] == "STOPPED" %}<form class="action start" action="/start/{{k['key']}}" method="POST"><button>START</button></form>{% endif %}<form class="action delete" action="/delete/{{k['key']}}" method="POST"><button data-en="Delete" data-ar="حذف">Delete</button></form></td></tr>{% endfor %}</tbody></table><div class="noResults" id="noKeyResults" style="display:none">No keys match this search or filter.</div></div>
 </section>
 
 <section class="server" id="serverPage"><div class="featureDeck">
@@ -543,7 +531,7 @@ filterKeys();
 // This prevents the browser from doing a normal page navigation after the first action.
 document.addEventListener('submit',async e=>{
  const form=e.target;
- if(!(form.matches('form[action="/generate"]')||form.matches('form[action="/add"]')||form.matches('form.action.stop')||form.matches('form.action.start')||form.matches('form.action.delete')||form.matches('form.action.reset')||form.matches('form.editKeyForm'))) return;
+ if(!(form.matches('form[action="/generate"]')||form.matches('form[action="/add"]')||form.matches('form.action.stop')||form.matches('form.action.start')||form.matches('form.action.delete'))) return;
  e.preventDefault();
  if(form.dataset.busy==='1') return;
  form.dataset.busy='1';
@@ -563,7 +551,7 @@ document.addEventListener('submit',async e=>{
    const allChip=document.querySelector('#keysPage .filterChip');
    if(allChip) allChip.classList.add('active');
    filterKeys();
-   const msg=form.matches('.delete')?'Key deleted instantly':form.matches('.stop')?'Key stopped instantly':form.matches('.start')?'Key started instantly':form.matches('.reset')?'Key reset to its original duration — timer waits for first use':form.matches('.editKeyForm')?'Key updated successfully':form.action.endsWith('/add')?'Custom key added instantly':'New key generated instantly';
+   const msg=form.matches('.delete')?'Key deleted instantly':form.matches('.stop')?'Key stopped instantly':form.matches('.start')?'Key started instantly':form.action.endsWith('/add')?'Custom key added instantly':'New key generated instantly';
    toast('✓',msg);
  }catch(err){
    toast('!','Could not update key');
@@ -571,7 +559,6 @@ document.addEventListener('submit',async e=>{
  }finally{form.dataset.busy='0';}
 });
 
-function openEdit(btn){const modal=document.getElementById('editModal'),form=document.getElementById('editKeyForm');if(!modal||!form)return;const key=btn.dataset.key||'';let sec=Math.max(0,parseInt(btn.dataset.seconds||'0',10));document.getElementById('editKeyName').value=key;document.getElementById('editDays').value=Math.floor(sec/86400);document.getElementById('editHours').value=Math.max(0,Math.ceil((sec%86400)/3600));document.getElementById('editMax').value=btn.dataset.max||1;form.action='/edit/'+encodeURIComponent(key);modal.classList.add('show')}function closeEdit(){let m=document.getElementById('editModal');if(m)m.classList.remove('show')}
 function jumpTo(id){let e=document.getElementById(id);if(e)e.scrollIntoView({behavior:"smooth",block:"start"})}
 setInterval(()=>{let e=document.getElementById("dashClock");if(e)e.textContent=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})},1000);
 
@@ -625,7 +612,7 @@ def home():
     cycle=con.execute("SELECT reset_at FROM log_cycle WHERE id=1").fetchone()
     log_reset_at=cycle["reset_at"] if cycle else (datetime.utcnow()+timedelta(days=1)).isoformat()
     logrows=con.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 60").fetchall()
-    icons={"KEY_CREATED":"✦","KEY_ADDED":"＋","KEY_STOPPED":"Ⅱ","KEY_STARTED":"▶","KEY_DELETED":"×","KEY_EDITED":"✎","KEY_RESET":"↺","UPDATE_SENT":"↑","UPDATE_CANCELLED":"↶","SERVER_STOPPED":"■","SERVER_STARTED":"●"}
+    icons={"KEY_CREATED":"✦","KEY_ADDED":"＋","KEY_STOPPED":"Ⅱ","KEY_STARTED":"▶","KEY_DELETED":"×","UPDATE_SENT":"↑","UPDATE_CANCELLED":"↶","SERVER_STOPPED":"■","SERVER_STARTED":"●"}
     logs=[]
     for lr in logrows:
         z=dict(lr);z["icon"]=icons.get(z["action"],"•")
@@ -649,8 +636,8 @@ def generate():
         key=random_key(days,hours)
         if not con.execute("SELECT 1 FROM keys WHERE key=?",(key,)).fetchone(): break
     now=datetime.utcnow()
-    con.execute("INSERT INTO keys(key,expiry,active,created,max_devices,paused_seconds,stopped,duration_seconds,activated_at) VALUES(?,?,?,?,?,NULL,0,?,?)",
-                (key,(now+duration).isoformat(),1,now.isoformat(),limit,int(duration.total_seconds()),None))
+    con.execute("INSERT INTO keys(key,expiry,active,created,max_devices,paused_seconds,stopped) VALUES(?,?,?,?,?,NULL,0)",
+                (key,(now+duration).isoformat(),1,now.isoformat(),limit))
     add_log(con,"KEY_CREATED",f"Generated {key} • {days}D {hours}H • {limit} device(s)")
     con.commit();con.close();session["notice"]="New key generated successfully";session["notice_icon"]="✦";return redirect("/")
 
@@ -663,28 +650,10 @@ def add_key():
     con=db()
     con.execute("DELETE FROM key_devices WHERE key=?",(key,))
     con.execute("DELETE FROM keys WHERE key=?",(key,))
-    con.execute("INSERT INTO keys(key,expiry,active,created,max_devices,paused_seconds,stopped,duration_seconds,activated_at) VALUES(?,?,?,?,?,NULL,0,?,?)",
-                (key,(now+duration).isoformat(),1,now.isoformat(),limit,int(duration.total_seconds()),None))
+    con.execute("INSERT INTO keys(key,expiry,active,created,max_devices,paused_seconds,stopped) VALUES(?,?,?,?,?,NULL,0)",
+                (key,(now+duration).isoformat(),1,now.isoformat(),limit))
     add_log(con,"KEY_ADDED",f"Added custom key {key} • limit {limit} device(s)")
     con.commit();con.close();session["notice"]="Custom key added successfully";session["notice_icon"]="＋";return redirect("/")
-
-@app.route("/edit/<key>",methods=["POST"])
-def edit_key(key):
-    if not logged_in(): return redirect("/")
-    old_key=key.strip().upper();new_key=request.form.get("new_key","").strip().upper() or old_key
-    duration,days,hours=duration_from_form();limit=max_devices_from_form();con=db();r=con.execute("SELECT * FROM keys WHERE key=?",(old_key,)).fetchone()
-    if not r:
-        con.close();session["notice"]="Key not found";session["notice_icon"]="!";return redirect("/")
-    if new_key!=old_key and con.execute("SELECT 1 FROM keys WHERE key=?",(new_key,)).fetchone():
-        con.close();session["notice"]="That key name already exists";session["notice_icon"]="!";return redirect("/")
-    new_seconds=max(1,int(duration.total_seconds()));expiry=(datetime.utcnow()+timedelta(seconds=new_seconds)).isoformat();stopped=bool(r["stopped"]) or not bool(r["active"])
-    unused=r["activated_at"] is None
-    if stopped: con.execute("UPDATE keys SET key=?,expiry=?,max_devices=?,paused_seconds=?,duration_seconds=? WHERE key=?",(new_key,expiry,limit,new_seconds,new_seconds,old_key))
-    elif unused: con.execute("UPDATE keys SET key=?,expiry=?,max_devices=?,paused_seconds=NULL,duration_seconds=?,activated_at=NULL WHERE key=?",(new_key,expiry,limit,new_seconds,old_key))
-    else: con.execute("UPDATE keys SET key=?,expiry=?,max_devices=?,paused_seconds=NULL,duration_seconds=? WHERE key=?",(new_key,expiry,limit,new_seconds,old_key))
-    if new_key!=old_key: con.execute("UPDATE key_devices SET key=? WHERE key=?",(new_key,old_key))
-    add_log(con,"KEY_EDITED",f"Edited {old_key} -> {new_key} • {days}D {hours}H • {limit} device(s)")
-    con.commit();con.close();session["notice"]="Key updated successfully";session["notice_icon"]="✦";return redirect("/")
 
 @app.route("/stop/<key>",methods=["POST"])
 def stop(key):
@@ -702,55 +671,18 @@ def start(key):
     if not logged_in(): return redirect("/")
     con=db();r=con.execute("SELECT * FROM keys WHERE key=?",(key,)).fetchone()
     if r:
-        sec=max(0,int(r["paused_seconds"] or r["duration_seconds"] or 0))
-        if r["activated_at"] is None:
-            con.execute("UPDATE keys SET active=1,stopped=0,paused_seconds=NULL WHERE key=?",(key,))
-        else:
-            con.execute("UPDATE keys SET active=1,stopped=0,paused_seconds=NULL,expiry=? WHERE key=?",
-                        ((datetime.utcnow()+timedelta(seconds=sec)).isoformat(),key))
+        sec=max(0,int(r["paused_seconds"] or 0))
+        con.execute("UPDATE keys SET active=1,stopped=0,paused_seconds=NULL,expiry=? WHERE key=?",
+                    ((datetime.utcnow()+timedelta(seconds=sec)).isoformat(),key))
         add_log(con,"KEY_STARTED",f"Started key {key} with {pretty_time(sec)} remaining")
         con.commit()
     con.close();session["notice"]="Key started and timer resumed";session["notice_icon"]="▶";return redirect("/")
-
-@app.route("/reset/<key>",methods=["POST"])
-def reset_key(key):
-    if not logged_in(): return redirect("/")
-    con=db();r=con.execute("SELECT * FROM keys WHERE key=?",(key,)).fetchone()
-    if r:
-        sec=max(1,int(r["duration_seconds"] or 3600))
-        # Restore original duration and arm it for first-use activation. Device bindings stay intact.
-        con.execute("UPDATE keys SET active=1,stopped=0,paused_seconds=NULL,activated_at=NULL,expiry=? WHERE key=?",
-                    ((datetime.utcnow()+timedelta(seconds=sec)).isoformat(),key))
-        add_log(con,"KEY_RESET",f"Reset key {key} to original duration {pretty_time(sec)}")
-        con.commit()
-    con.close();session["notice"]="Key duration reset • countdown waits for first use";session["notice_icon"]="↺";return redirect("/")
 
 @app.route("/delete/<key>",methods=["POST"])
 def delete(key):
     if not logged_in(): return redirect("/")
     con=db();con.execute("DELETE FROM key_devices WHERE key=?",(key,));con.execute("DELETE FROM keys WHERE key=?",(key,));add_log(con,"KEY_DELETED",f"Deleted key {key}");con.commit();con.close()
     session["notice"]="Key deleted";session["notice_icon"]="×";return redirect("/")
-
-@app.route("/keylist.json",methods=["GET"])
-def keylist_json():
-    """Public read-only snapshot for Lua clients that cannot make HTTPS requests themselves."""
-    con=db()
-    rows=con.execute("SELECT * FROM keys").fetchall()
-    out={}
-    for r in rows:
-        devices=con.execute("SELECT device_id FROM key_devices WHERE key=? ORDER BY first_seen",(r["key"],)).fetchall()
-        out[str(r["key"]).upper()]={
-            "expiry":r["expiry"],
-            "active":bool(r["active"]),
-            "stopped":bool(r["stopped"]),
-            "max_devices":int(r["max_devices"] or 1),
-            "devices":[str(x["device_id"]) for x in devices],
-        }
-    con.close()
-    resp=jsonify(out)
-    resp.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
-    return resp
-
 
 @app.route("/verify",methods=["POST"])
 def verify():
@@ -763,10 +695,12 @@ def verify():
     if server and not server["enabled"]:
         con.close();return jsonify(valid=False,reason="server_offline")
     r=con.execute("SELECT * FROM keys WHERE key=?",(key,)).fetchone()
-    if not r or not r["active"] or r["stopped"]:
+    if not r:
+        con.close();return jsonify(valid=False,reason="invalid_key")
+    if not r["active"] or r["stopped"]:
         con.close();return jsonify(valid=False,reason="inactive")
-    if r["activated_at"] is not None and seconds_left(r)<=0:
-        con.close();return jsonify(valid=False,reason="inactive")
+    if seconds_left(r)<=0:
+        con.close();return jsonify(valid=False,reason="expired")
     # Device limits are enforced when the client supplies a stable device_id.
     if device_id:
         known=con.execute("SELECT 1 FROM key_devices WHERE key=? AND device_id=?",(key,device_id)).fetchone()
@@ -776,11 +710,6 @@ def verify():
                 con.close();return jsonify(valid=False,reason="device_limit")
             con.execute("INSERT INTO key_devices(key,device_id,first_seen) VALUES(?,?,?)",(key,device_id,datetime.utcnow().isoformat()))
             con.commit()
-    # Activate only after every validity/device check has succeeded.
-    if r["activated_at"] is None:
-        sec=max(1,int(r["duration_seconds"] or 3600)); now=datetime.utcnow()
-        con.execute("UPDATE keys SET activated_at=?,expiry=? WHERE key=?",(now.isoformat(),(now+timedelta(seconds=sec)).isoformat(),key))
-        con.commit();r=con.execute("SELECT * FROM keys WHERE key=?",(key,)).fetchone()
     con.close()
     return jsonify(valid=True,remaining_seconds=seconds_left(r),max_devices=r["max_devices"])
 
